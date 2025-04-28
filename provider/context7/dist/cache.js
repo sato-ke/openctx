@@ -12,7 +12,7 @@ export class Cache {
         const value = await fill();
         this.cache.set(key, { value });
         const timeout = setTimeout(() => this.cache.delete(key), this.timeoutMS);
-        if (typeof timeout !== 'number' && 'unref' in timeout)
+        if (typeof timeout !== "number" && "unref" in timeout)
             timeout.unref();
         return value;
     }

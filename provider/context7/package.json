@@ -18,6 +18,7 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@openctx/provider": "workspace:*"
+    "@openctx/provider": "workspace:*",
+    "gpt-tokenizer": "^2.9.0"
   }
 }

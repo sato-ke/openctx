@@ -23,3 +23,18 @@ export type DocumentState =
   | "error"
   | "stop"
   | "delete";
+
+export interface JsonDocs {
+  codeTitle: string;
+  codeDescription: string;
+  codeLanguage: string;
+  codeTokens: number;
+  codeId: string;
+  pageTitle: string;
+  codeList: Array<{
+    language: string;
+    code: string;
+  }>;
+  relevance: number;
+}
+
