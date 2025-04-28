@@ -1,30 +1,67 @@
-import { Cache } from "./cache.js";
 import { SearchResponse, JsonDocs } from './types.js';
+import QuickLRU  from "quick-lru";
 
 const CONTEXT7_API_BASE_URL = "https://context7.com/api";
-const searchCache = new Cache<SearchResponse | null>({ ttlMS: 1000 * 60 * 5 });
+const searchCache = new QuickLRU<string, SearchResponse | null>({ maxSize: 500, maxAge: 1000 * 60 * 30 });
+
+function debounce<F extends (...args: any[]) => any> (
+  fn: F,
+  timeout: number,
+  cancelledReturn: Awaited<ReturnType<F>>
+): (...args: Parameters<F>) => Promise<Awaited<ReturnType<F>>> {
+  let controller = new AbortController();
+  let timeoutId: NodeJS.Timeout;
+
+  return (...args) => {
+    return new Promise<Awaited<ReturnType<F>>>((resolve) => {
+      controller.abort();
+
+      controller = new AbortController();
+      const { signal } = controller;
+
+      timeoutId = setTimeout(async () => {
+        const result = await fn(...args);
+        resolve(result);
+      }, timeout);
+
+      signal.addEventListener('abort', () => {
+        clearTimeout(timeoutId);
+        resolve(cancelledReturn);
+      });
+    })
+  }
+}
 
 /**
  * Searches for libraries matching the given query
  * @param query The search query
  * @returns Search results or null if the request fails
  */
-export async function searchLibraries(query: string): Promise<SearchResponse | null> {
-	return await searchCache.getOrFill(query, async () => {
-		try {
-			const url = new URL(`${CONTEXT7_API_BASE_URL}/v1/search`);
-			url.searchParams.set("query", query);
-			const response = await fetch(url);
-			if (!response.ok) {
-				console.error(`Failed to search libraries: ${response.status}`);
-				return null;
-			}
-			return await response.json() as SearchResponse;
-		} catch (error) {
-			console.error("Error searching libraries:", error);
-			return null;
-		}
-	})
+export const searchLibraries = debounce(_searchLibraries, 300, { results: [] });
+export async function _searchLibraries(query: string): Promise<SearchResponse | null> {
+  const cacheKey = `search-${query}`;
+  if (searchCache.has(cacheKey)) {
+    return searchCache.get(cacheKey)!;
+  }
+
+  try {
+    const url = new URL(`${CONTEXT7_API_BASE_URL}/v1/search`);
+    url.searchParams.set("query", query);
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      console.error(`Failed to search libraries: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json() as SearchResponse;
+
+    searchCache.set(cacheKey, data);
+    return data;
+  } catch (error) {
+    console.error("Error searching libraries:", error);
+    return null;
+  }
 }
 
 /**
@@ -77,7 +114,6 @@ export async function fetchLibraryDocumentation(
     return null;
   }
 }
-
 
 
 /**

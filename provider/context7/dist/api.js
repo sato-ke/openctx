@@ -1,28 +1,52 @@
-import { Cache } from "./cache.js";
+import QuickLRU from "quick-lru";
 const CONTEXT7_API_BASE_URL = "https://context7.com/api";
-const searchCache = new Cache({ ttlMS: 1000 * 60 * 5 });
+const searchCache = new QuickLRU({ maxSize: 500, maxAge: 1000 * 60 * 30 });
+function debounce(fn, timeout, cancelledReturn) {
+    let controller = new AbortController();
+    let timeoutId;
+    return (...args) => {
+        return new Promise((resolve) => {
+            controller.abort();
+            controller = new AbortController();
+            const { signal } = controller;
+            timeoutId = setTimeout(async () => {
+                const result = await fn(...args);
+                resolve(result);
+            }, timeout);
+            signal.addEventListener('abort', () => {
+                clearTimeout(timeoutId);
+                resolve(cancelledReturn);
+            });
+        });
+    };
+}
 /**
  * Searches for libraries matching the given query
  * @param query The search query
  * @returns Search results or null if the request fails
  */
-export async function searchLibraries(query) {
-    return await searchCache.getOrFill(query, async () => {
-        try {
-            const url = new URL(`${CONTEXT7_API_BASE_URL}/v1/search`);
-            url.searchParams.set("query", query);
-            const response = await fetch(url);
-            if (!response.ok) {
-                console.error(`Failed to search libraries: ${response.status}`);
-                return null;
-            }
-            return await response.json();
-        }
-        catch (error) {
-            console.error("Error searching libraries:", error);
+export const searchLibraries = debounce(_searchLibraries, 300, { results: [] });
+export async function _searchLibraries(query) {
+    const cacheKey = `search-${query}`;
+    if (searchCache.has(cacheKey)) {
+        return searchCache.get(cacheKey);
+    }
+    try {
+        const url = new URL(`${CONTEXT7_API_BASE_URL}/v1/search`);
+        url.searchParams.set("query", query);
+        const response = await fetch(url);
+        if (!response.ok) {
+            console.error(`Failed to search libraries: ${response.status}`);
             return null;
         }
-    });
+        const data = await response.json();
+        searchCache.set(cacheKey, data);
+        return data;
+    }
+    catch (error) {
+        console.error("Error searching libraries:", error);
+        return null;
+    }
 }
 /**
  * Fetches documentation context for a specific library

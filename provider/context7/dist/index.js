@@ -1,6 +1,5 @@
 import { searchLibraries, fetchLibraryDocumentation } from "./api.js";
-import { countTokens } from 'gpt-tokenizer/encoding/cl100k_base';
-export const checkSettings = (settings) => {
+const checkSettings = (settings) => {
     const missingKeys = ["format", "tokens"].filter((key) => !(key in settings));
     if (missingKeys.length > 0) {
         throw new Error(`Missing settings: ${JSON.stringify(missingKeys)}`);
@@ -16,7 +15,6 @@ const Context7Provider = {
     },
     async mentions(params, settings) {
         checkSettings(settings);
-        console.log(`query: ${params.query}`);
         if (params.query === undefined || params.query.length === 0) {
             return [];
         }
@@ -53,7 +51,7 @@ const Context7Provider = {
             {
                 title: `context7 docs for repository: ${id} / topic: ${topic}`,
                 url: `${CONTEXT7_BASE_URL}/${id}/llms.${settings.format ?? "txt"}?topic=${topic}tokens=${settings.tokens}`,
-                ui: { hover: { text: `${id}#${topic} [${countTokens(response)}]` } },
+                ui: { hover: { text: `${id}#${topic}` } },
                 ai: { content: response },
             },
         ];

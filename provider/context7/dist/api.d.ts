@@ -4,7 +4,8 @@ import { SearchResponse } from './types.js';
  * @param query The search query
  * @returns Search results or null if the request fails
  */
-export declare function searchLibraries(query: string): Promise<SearchResponse | null>;
+export declare const searchLibraries: (query: string) => Promise<SearchResponse | null>;
+export declare function _searchLibraries(query: string): Promise<SearchResponse | null>;
 /**
  * Fetches documentation context for a specific library
  * @param libraryId The library ID to fetch documentation for

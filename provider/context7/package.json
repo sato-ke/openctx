@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@openctx/provider": "workspace:*",
-    "gpt-tokenizer": "^2.9.0"
+    "gpt-tokenizer": "^2.9.0",
+    "quick-lru": "^7.0.1"
   }
 }
