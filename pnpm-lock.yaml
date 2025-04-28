@@ -516,6 +516,12 @@ importers:
         specifier: workspace:*
         version: link:../../lib/provider
 
+  provider/context7:
+    dependencies:
+      '@openctx/provider':
+        specifier: workspace:*
+        version: link:../../lib/provider
+
   provider/devdocs:
     dependencies:
       '@openctx/provider':
