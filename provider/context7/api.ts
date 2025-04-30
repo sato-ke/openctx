@@ -1,10 +1,14 @@
-import { SearchResponse, JsonDocs } from './types.js';
-import QuickLRU  from "quick-lru";
+import { SearchResponse, JsonDocs } from "./types.js";
+import QuickLRU from "quick-lru";
 
 const CONTEXT7_API_BASE_URL = "https://context7.com/api";
-const searchCache = new QuickLRU<string, SearchResponse | null>({ maxSize: 500, maxAge: 1000 * 60 * 30 });
 
-function debounce<F extends (...args: any[]) => any> (
+const searchCache = new QuickLRU<string, SearchResponse | null>({
+  maxSize: 500,
+  maxAge: 1000 * 60 * 30,
+});
+
+function debounce<F extends (...args: any[]) => any>(
   fn: F,
   timeout: number,
   cancelledReturn: Awaited<ReturnType<F>>
@@ -13,7 +17,7 @@ function debounce<F extends (...args: any[]) => any> (
   let timeoutId: NodeJS.Timeout;
 
   return (...args) => {
-    return new Promise<Awaited<ReturnType<F>>>((resolve) => {
+    return new Promise((resolve) => {
       controller.abort();
 
       controller = new AbortController();
@@ -24,12 +28,12 @@ function debounce<F extends (...args: any[]) => any> (
         resolve(result);
       }, timeout);
 
-      signal.addEventListener('abort', () => {
+      signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         resolve(cancelledReturn);
       });
-    })
-  }
+    });
+  };
 }
 
 /**
@@ -38,7 +42,9 @@ function debounce<F extends (...args: any[]) => any> (
  * @returns Search results or null if the request fails
  */
 export const searchLibraries = debounce(_searchLibraries, 300, { results: [] });
-export async function _searchLibraries(query: string): Promise<SearchResponse | null> {
+export async function _searchLibraries(
+  query: string
+): Promise<SearchResponse | null> {
   const cacheKey = `search-${query}`;
   if (searchCache.has(cacheKey)) {
     return searchCache.get(cacheKey)!;
@@ -54,9 +60,11 @@ export async function _searchLibraries(query: string): Promise<SearchResponse | 
       return null;
     }
 
-    const data = await response.json() as SearchResponse;
+    const data = (await response.json()) as SearchResponse;
 
-    searchCache.set(cacheKey, data);
+    if (data.results.length > 0) {
+      searchCache.set(cacheKey, data);
+    }
     return data;
   } catch (error) {
     console.error("Error searching libraries:", error);
@@ -72,7 +80,7 @@ export async function _searchLibraries(query: string): Promise<SearchResponse | 
  */
 export async function fetchLibraryDocumentation(
   libraryId: string,
-  format: 'txt' | 'json',
+  format: "txt" | "json",
   tokens: number,
   options: {
     topic?: string;
@@ -114,7 +122,6 @@ export async function fetchLibraryDocumentation(
     return null;
   }
 }
-
 
 /**
  * Process JSON response and convert it to a specific format

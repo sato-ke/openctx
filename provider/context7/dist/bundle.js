@@ -249,7 +249,10 @@ var QuickLRU = class extends Map {
 
 // api.ts
 var CONTEXT7_API_BASE_URL = "https://context7.com/api";
-var searchCache = new QuickLRU({ maxSize: 500, maxAge: 1e3 * 60 * 30 });
+var searchCache = new QuickLRU({
+  maxSize: 500,
+  maxAge: 1e3 * 60 * 30
+});
 function debounce(fn, timeout, cancelledReturn) {
   let controller = new AbortController();
   let timeoutId;
@@ -284,7 +287,9 @@ async function _searchLibraries(query) {
       return null;
     }
     const data = await response.json();
-    searchCache.set(cacheKey, data);
+    if (data.results.length > 0) {
+      searchCache.set(cacheKey, data);
+    }
     return data;
   } catch (error) {
     console.error("Error searching libraries:", error);

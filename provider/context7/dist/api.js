@@ -1,6 +1,9 @@
 import QuickLRU from "quick-lru";
 const CONTEXT7_API_BASE_URL = "https://context7.com/api";
-const searchCache = new QuickLRU({ maxSize: 500, maxAge: 1000 * 60 * 30 });
+const searchCache = new QuickLRU({
+    maxSize: 500,
+    maxAge: 1000 * 60 * 30,
+});
 function debounce(fn, timeout, cancelledReturn) {
     let controller = new AbortController();
     let timeoutId;
@@ -13,7 +16,7 @@ function debounce(fn, timeout, cancelledReturn) {
                 const result = await fn(...args);
                 resolve(result);
             }, timeout);
-            signal.addEventListener('abort', () => {
+            signal.addEventListener("abort", () => {
                 clearTimeout(timeoutId);
                 resolve(cancelledReturn);
             });
@@ -39,8 +42,10 @@ export async function _searchLibraries(query) {
             console.error(`Failed to search libraries: ${response.status}`);
             return null;
         }
-        const data = await response.json();
-        searchCache.set(cacheKey, data);
+        const data = (await response.json());
+        if (data.results.length > 0) {
+            searchCache.set(cacheKey, data);
+        }
         return data;
     }
     catch (error) {
