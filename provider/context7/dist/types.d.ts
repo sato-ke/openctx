@@ -8,11 +8,13 @@ export interface SearchResult {
     totalTokens: number;
     totalSnippets: number;
     totalPages: number;
+    stars: number;
+    trustScore: number;
 }
 export interface SearchResponse {
     results: SearchResult[];
 }
-export type DocumentState = "initial" | "parsed" | "finalized" | "invalid_docs" | "error" | "stop" | "delete";
+export type DocumentState = 'initial' | 'parsed' | 'finalized' | 'invalid_docs' | 'error' | 'stop' | 'delete';
 export interface JsonDocs {
     codeTitle: string;
     codeDescription: string;
