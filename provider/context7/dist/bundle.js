@@ -296,14 +296,14 @@ async function _searchLibraries(query) {
     return null;
   }
 }
-async function fetchLibraryDocumentation(libraryId, format, tokens, options = {}) {
+async function fetchLibraryDocumentation(libraryId, tokens, options = {}) {
   try {
     if (libraryId.startsWith("/")) {
       libraryId = libraryId.slice(1);
     }
     const url = new URL(`${CONTEXT7_API_BASE_URL}/v1/${libraryId}`);
     url.searchParams.set("tokens", tokens.toString());
-    url.searchParams.set("type", format);
+    url.searchParams.set("type", "txt");
     if (options.topic) url.searchParams.set("topic", options.topic);
     const response = await fetch(url, {
       headers: {
@@ -318,41 +318,23 @@ async function fetchLibraryDocumentation(libraryId, format, tokens, options = {}
     if (!text || text === "No content available" || text === "No context data available") {
       return null;
     }
-    if (format === "json") {
-      return processJsonResponse(text);
-    }
     return text;
   } catch (error) {
     console.error("Error fetching library documentation:", error);
     return null;
   }
 }
-function processJsonResponse(jsonText) {
-  try {
-    const data = JSON.parse(jsonText);
-    const formattedData = data.map((item) => ({
-      id: item.codeId,
-      title: item.codeTitle,
-      description: item.codeDescription,
-      lang: item.codeLanguage,
-      page: item.pageTitle,
-      codes: item.codeList.map((item2) => item2.code)
-    }));
-    return JSON.stringify(formattedData);
-  } catch (error) {
-    console.error("Error processing JSON response:", error);
-    return jsonText;
-  }
-}
 
 // index.ts
 var checkSettings = (settings) => {
-  const missingKeys = ["format", "tokens"].filter((key) => !(key in settings));
+  const missingKeys = ["tokens"].filter((key) => !(key in settings));
   if (missingKeys.length > 0) {
     throw new Error(`Missing settings: ${JSON.stringify(missingKeys)}`);
   }
 };
 var CONTEXT7_BASE_URL = "https://context7.com";
+var DEFAULT_MENTION_LIMIT = 3;
+var MAX_MENTION_LIMIT = 20;
 var Context7Provider = {
   meta(params, settings) {
     return {
@@ -371,7 +353,8 @@ var Context7Provider = {
     if (!response || response.results.length === 0) {
       return [];
     }
-    const libraries = response.results.slice(0, 20);
+    const mentionLimit = typeof settings.mentionLimit === "number" ? Math.min(Math.max(settings.mentionLimit, 1), MAX_MENTION_LIMIT) : DEFAULT_MENTION_LIMIT;
+    const libraries = response.results.slice(0, mentionLimit);
     return libraries.map((result) => ({
       title: result.title,
       uri: `${CONTEXT7_BASE_URL}/${result.id}`,
@@ -388,7 +371,7 @@ var Context7Provider = {
       return [];
     }
     const { id, topic } = params.mention.data;
-    const response = await fetchLibraryDocumentation(id, settings.format, settings.tokens, {
+    const response = await fetchLibraryDocumentation(id, settings.tokens, {
       topic
     });
     if (!response) {
@@ -397,7 +380,7 @@ var Context7Provider = {
     return [
       {
         title: `context7 docs for repository: ${id} / topic: ${topic}`,
-        url: `${CONTEXT7_BASE_URL}/${id}/llms.${settings.format ?? "txt"}?topic=${topic}tokens=${settings.tokens}`,
+        url: `${CONTEXT7_BASE_URL}/${id}/llms.txt?topic=${topic}tokens=${settings.tokens}`,
         ui: { hover: { text: `${id}#${topic}` } },
         ai: { content: response }
       }

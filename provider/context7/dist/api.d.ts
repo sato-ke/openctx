@@ -1,4 +1,4 @@
-import { SearchResponse } from "./types.js";
+import type { SearchResponse } from './types.js';
 /**
  * Searches for libraries matching the given query
  * @param query The search query
@@ -9,10 +9,11 @@ export declare function _searchLibraries(query: string): Promise<SearchResponse 
 /**
  * Fetches documentation context for a specific library
  * @param libraryId The library ID to fetch documentation for
+ * @param tokens Number of tokens to request
  * @param options Options for the request
  * @returns The documentation text or null if the request fails
  */
-export declare function fetchLibraryDocumentation(libraryId: string, format: "txt" | "json", tokens: number, options?: {
+export declare function fetchLibraryDocumentation(libraryId: string, tokens: number, options?: {
     topic?: string;
 }): Promise<string | null>;
 /**
