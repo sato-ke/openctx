@@ -31,7 +31,7 @@ const Context7Provider: Provider = {
     meta(params: MetaParams, settings: Settings): MetaResult {
         return {
             name: 'Context7',
-            mentions: { label: 'type `{repository query}.{topic keyword}`' },
+            mentions: { label: 'type `<search library query> [topic keyword]`' },
         }
     },
 
@@ -41,8 +41,8 @@ const Context7Provider: Provider = {
         if (params.query === undefined || params.query.length === 0) {
             return []
         }
-        const query = params.query.toLowerCase()
-        const [repositoryQuery, topicKeyword] = query.split('.')
+        const [repositoryQuery, ...rest] = params.query.trim().toLocaleLowerCase().split(/\s+/)
+        const topicKeyword = rest.join(' ') || undefined
 
         const response = await searchLibraries(repositoryQuery)
 

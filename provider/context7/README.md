@@ -19,10 +19,9 @@ Configure your OpenCtx client:
 ### How to use in your editor
 
 - To search for repository documentation, type a query in the form:
-  - `@context7 {repository query}`
+  - `@context7 <search library query> [topic keyword]`
     e.g. `@context7 react`
-  - `@context7 {repository query}.{topic keyword}`
-    e.g. `@context7 react.hooks`
+    e.g. `@context7 react hooks`
 - The `topic keyword` is optional. If omitted, you will get general documentation for the repository.
 
 ## Features

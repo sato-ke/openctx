@@ -1014,7 +1014,7 @@ var Context7Provider = {
   meta(params, settings) {
     return {
       name: "Context7",
-      mentions: { label: "type `{repository query}.{topic keyword}`" }
+      mentions: { label: "type `<search library query> [topic keyword]`" }
     };
   },
   async mentions(params, settings) {
@@ -1022,8 +1022,8 @@ var Context7Provider = {
     if (params.query === void 0 || params.query.length === 0) {
       return [];
     }
-    const query = params.query.toLowerCase();
-    const [repositoryQuery, topicKeyword] = query.split(".");
+    const [repositoryQuery, ...rest] = params.query.trim().toLocaleLowerCase().split(/\s+/);
+    const topicKeyword = rest.join(" ") || void 0;
     const response = await searchLibraries(repositoryQuery);
     if (!response || response.results.length === 0) {
       return [];
