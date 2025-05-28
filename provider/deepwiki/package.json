@@ -1,0 +1,24 @@
+{
+  "name": "@openctx/deepwiki",
+  "version": "0.0.13",
+  "description": "Use information from deepwiki (OpenCtx provider)",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/bundle.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/bundle.js",
+    "dist/index.d.ts"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "bundle": "tsc --build && esbuild --log-level=error --bundle --format=esm --outfile=dist/bundle.js index.ts",
+    "prepublishOnly": "tsc --build --clean && npm run --silent bundle",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@openctx/provider": "workspace:*",
+    "fuzzysort": "^3.0.1",
+    "quick-lru": "^7.0.1"
+  }
+}
