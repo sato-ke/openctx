@@ -516,6 +516,18 @@ importers:
         specifier: workspace:*
         version: link:../../lib/provider
 
+  provider/deepwiki:
+    dependencies:
+      '@openctx/provider':
+        specifier: workspace:*
+        version: link:../../lib/provider
+      fuzzysort:
+        specifier: ^3.0.1
+        version: 3.0.1
+      quick-lru:
+        specifier: ^7.0.1
+        version: 7.0.1
+
   provider/devdocs:
     dependencies:
       '@openctx/provider':
@@ -13375,6 +13387,11 @@ packages:
     resolution: {integrity: sha512-WuyALRjWPDGtt/wzJiadO5AXY+8hZ80hVpe6MyivgraREW751X3SbhRvG3eLKOYN+8VEvqLcf3wdnt44Z4S4SA==}
     engines: {node: '>=10'}
     dev: true
+
+  /quick-lru@7.0.1:
+    resolution: {integrity: sha512-kLjThirJMkWKutUKbZ8ViqFc09tDQhlbQo2MNuVeLWbRauqYP96Sm6nzlQ24F0HFjUNZ4i9+AgldJ9H6DZXi7g==}
+    engines: {node: '>=18'}
+    dev: false
 
   /ramda@0.29.0:
     resolution: {integrity: sha512-BBea6L67bYLtdbOqfp8f58fPMqEwx0doL+pAi8TZyp2YWz8R9G8z9x75CZI8W+ftqhFHCpEX2cRnUUXK130iKA==}
