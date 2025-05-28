@@ -30,6 +30,48 @@ describe('parseInputQuery', () => {
         })
     })
 
+    test('parses GitHub URL without path', () => {
+        const result = parseInputQuery('https://github.com/facebook/react')
+        expect(result).toEqual({
+            repoName: 'facebook/react',
+            searchQuery: undefined,
+        })
+    })
+
+    test('parses GitHub URL with path', () => {
+        const result = parseInputQuery('https://github.com/microsoft/vscode/blob/main/README.md')
+        expect(result).toEqual({
+            repoName: 'microsoft/vscode',
+            searchQuery: undefined,
+        })
+    })
+
+    test('parses GitHub URL with search query', () => {
+        const result = parseInputQuery('https://github.com/facebook/react/tree/main/packages hooks api')
+        expect(result).toEqual({
+            repoName: 'facebook/react',
+            searchQuery: 'hooks api',
+        })
+    })
+
+    test('parses GitHub URL with complex path', () => {
+        const result = parseInputQuery(
+            'https://github.com/vercel/next.js/blob/canary/docs/api-reference/next.config.js/introduction.md',
+        )
+        expect(result).toEqual({
+            repoName: 'vercel/next.js',
+            searchQuery: undefined,
+        })
+    })
+
+    test('handles GitHub URL with query parameters', () => {
+        const result = parseInputQuery('https://github.com/facebook/react/issues?q=is%3Aopen+is%3Aissue')
+        expect(result).toEqual({
+            repoName: 'facebook/react',
+            searchQuery: undefined,
+        })
+    })
+
     test('parses repository name with multi-word search query', () => {
         const result = parseInputQuery('microsoft/vscode api reference')
         expect(result).toEqual({
@@ -64,8 +106,44 @@ describe('parseInputQuery', () => {
         expect(() => parseInputQuery('/ ')).toThrow('User name and repository name cannot be empty')
     })
 
+    test('throws error for non-GitHub URLs', () => {
+        expect(() => parseInputQuery('https://gitlab.com/user/repo')).toThrow(
+            'URL must be from github.com',
+        )
+        expect(() => parseInputQuery('https://bitbucket.org/user/repo')).toThrow(
+            'URL must be from github.com',
+        )
+    })
+
+    test('throws error for invalid GitHub URLs', () => {
+        expect(() => parseInputQuery('https://github.com/')).toThrow(
+            'GitHub URL must contain user and repository name',
+        )
+        expect(() => parseInputQuery('https://github.com/user')).toThrow(
+            'GitHub URL must contain user and repository name',
+        )
+        expect(() => parseInputQuery('https://github.com/user/')).toThrow(
+            'User name and repository name cannot be empty',
+        )
+    })
+
+    test('throws error for malformed URLs', () => {
+        expect(() => parseInputQuery('not-a-url')).toThrow(
+            'Repository name must be in "user/repo" format',
+        )
+        expect(() => parseInputQuery('https://invalid-url')).toThrow('URL must be from github.com')
+    })
+
     test('handles special characters in repository name', () => {
         const result = parseInputQuery('user-name/repo.name_test')
+        expect(result).toEqual({
+            repoName: 'user-name/repo.name_test',
+            searchQuery: undefined,
+        })
+    })
+
+    test('handles special characters in GitHub URL', () => {
+        const result = parseInputQuery('https://github.com/user-name/repo.name_test')
         expect(result).toEqual({
             repoName: 'user-name/repo.name_test',
             searchQuery: undefined,

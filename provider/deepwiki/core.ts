@@ -8,7 +8,8 @@ import type { MarkdownPage, ParsedQuery, Settings } from './types.js'
 
 /**
  * Parse user input into repository name and search query
- * @param query - Input in the form "@deepwiki user/repo [search query]"
+ * Supports both "user/repo" format and GitHub URLs
+ * @param query - Input in the form "user/repo [search query]" or "https://github.com/user/repo/path [search query]"
  * @returns Parsed result
  * @throws Error - If the input format is invalid
  */
@@ -22,8 +23,17 @@ export function parseInputQuery(query: string): ParsedQuery {
 
     // Split by space
     const parts = trimmed.split(/\s+/)
-    const repoName = parts[0]
+    const firstPart = parts[0]
     const searchQuery = parts.slice(1).join(' ') || undefined
+
+    let repoName: string
+
+    // Check if it's a GitHub URL
+    if (firstPart.startsWith('http')) {
+        repoName = extractRepoFromGitHubURL(firstPart)
+    } else {
+        repoName = firstPart
+    }
 
     // Check repository name format
     if (!repoName.includes('/') || repoName.split('/').length !== 2) {
@@ -37,6 +47,46 @@ export function parseInputQuery(query: string): ParsedQuery {
     }
 
     return { repoName, searchQuery }
+}
+
+/**
+ * Extract repository name from GitHub URL
+ * @param url - GitHub URL like "https://github.com/user/repo" or "https://github.com/user/repo/path"
+ * @returns Repository name in "user/repo" format
+ * @throws Error - If URL format is invalid
+ */
+function extractRepoFromGitHubURL(url: string): string {
+    try {
+        const urlObj = new URL(url)
+
+        // Check if it's a GitHub URL
+        if (urlObj.hostname !== 'github.com') {
+            throw new Error('URL must be from github.com')
+        }
+
+        // Extract path and remove leading slash
+        const pathParts = urlObj.pathname.slice(1).split('/')
+
+        // Need at least user and repo
+        if (pathParts.length < 2) {
+            throw new Error('GitHub URL must contain user and repository name')
+        }
+
+        const user = pathParts[0]
+        const repo = pathParts[1]
+
+        // Check for empty parts
+        if (!user || !repo) {
+            throw new Error('User name and repository name cannot be empty')
+        }
+
+        return `${user}/${repo}`
+    } catch (error) {
+        if (error instanceof Error) {
+            throw error
+        }
+        throw new Error('Invalid GitHub URL format')
+    }
 }
 
 /**
@@ -90,7 +140,8 @@ function extractNextFChunks(html: string): string[] {
     const chunks: string[] = []
     let match: RegExpExecArray | null
 
-    while ((match = PATTERN.exec(html)) !== null) {
+    match = PATTERN.exec(html)
+    while (match !== null) {
         try {
             // Unescape JSON
             const unescaped = JSON.parse(`"${match[1]}"`)
@@ -98,6 +149,7 @@ function extractNextFChunks(html: string): string[] {
         } catch {
             // Ignore JSON parse errors
         }
+        match = PATTERN.exec(html)
     }
 
     return chunks
