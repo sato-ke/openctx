@@ -12,7 +12,7 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "bundle": "tsc --build && esbuild --log-level=error --bundle --format=esm --outfile=dist/bundle.js index.ts",
+    "bundle": "tsc --build && esbuild --log-level=error --bundle --format=cjs --outfile=dist/bundle.js index.ts",
     "prepublishOnly": "tsc --build --clean && npm run --silent bundle",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -20,6 +20,7 @@
   "dependencies": {
     "@openctx/provider": "workspace:*",
     "fuzzysort": "^3.0.1",
+    "gpt-tokenizer": "^2.9.0",
     "quick-lru": "^7.0.1"
   }
 }
