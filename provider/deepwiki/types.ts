@@ -29,8 +29,6 @@ export interface MarkdownPage {
 export interface Settings {
     /** Maximum number of items returned by mentions() (default: 20, range: 1-20) */
     maxMentionItems?: number
-    /** Maximum number of characters per markdown content (default: 25000, range: 1000-100000) */
-    maxContentSize?: number
     /** Maximum number of tokens per markdown content (default: null, range: 100-15000) */
     maxTokens?: number
     /** Debounce delay in ms for mentions() calls (default: 300, range: 100-1000) */
@@ -75,9 +73,8 @@ export type ItemsResult = BaseItemsResult
  * Default settings values
  */
 export const DEFAULT_SETTINGS: Required<Settings> = {
-    maxMentionItems: 20,
-    maxContentSize: 25000,
-    maxTokens: 0, // 0 = disabled
+    maxMentionItems: 5,
+    maxTokens: 3000,
     debounceDelay: 300,
     enableNavigation: true,
 } as const
@@ -86,9 +83,8 @@ export const DEFAULT_SETTINGS: Required<Settings> = {
  * Range of setting values
  */
 export const SETTINGS_LIMITS = {
-    maxMentionItems: { min: 1, max: 50 },
-    maxContentSize: { min: 1000, max: 50000 },
-    maxTokens: { min: 100, max: 8000 },
+    maxMentionItems: { min: 1, max: 20 },
+    maxTokens: { min: 1000, max: 20000 },
     debounceDelay: { min: 100, max: 1000 },
 } as const
 
