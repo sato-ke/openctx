@@ -4,6 +4,7 @@
  */
 
 import fuzzysort from 'fuzzysort'
+import { encode } from 'gpt-tokenizer/encoding/cl100k_base'
 import type { MarkdownPage, ParsedQuery, Settings } from './types.js'
 
 /**
@@ -61,7 +62,7 @@ function extractRepoFromGitHubURL(url: string): string {
 
         // Check if it's a GitHub URL
         if (urlObj.hostname !== 'github.com') {
-            throw new Error('URL must be from github.com')
+            throw new Error('URL must be from https://github.com')
         }
 
         // Extract path and remove leading slash
@@ -105,6 +106,10 @@ export function buildDeepwikiURL(repoName: string): string {
  * @returns Array of extracted markdown pages
  */
 export function parseHTMLToMarkdown(html: string): MarkdownPage[] {
+    if (!html) {
+        return []
+    }
+
     const pages: MarkdownPage[] = []
 
     try {
@@ -178,20 +183,37 @@ function parseMarkdownPage(content: string): MarkdownPage {
         throw new Error('h1 heading not found')
     }
 
+    const cleanedContent = clearMarkdownContent(content)
+
     // Extract h2 headings
-    const h2Matches = content.match(/^##\s+(.+)$/gm) || []
+    const h2Matches = cleanedContent.match(/^##\s+(.+)$/gm) || []
     const h2Headings = h2Matches.map(match => match.replace(/^##\s+/, '').trim())
 
     // Generate summary
-    const summary = generateSummary(content)
+    const summary = generateSummary(cleanedContent)
 
     return {
         h1Title: h1Match[1].trim(),
         h2Headings,
         summary,
-        content,
-        size: content.length,
+        content: cleanedContent,
+        size: estimateTokenCount(cleanedContent),
     }
+}
+
+/**
+ * Remove common patterns and irrelevant sections from markdown content
+ * @param content - Markdown content to clean
+ * @returns Cleaned markdown content
+ */
+function clearMarkdownContent(content: string): string {
+    return (
+        content
+            // remove Relevant source links
+            .replace(/<details>\s*<summary>.*?<\/summary>(\s|.)*?<\/details>\s*/g, '')
+        // .replace(/Source: /g, '')
+        // .replace(/\[\S+:\d+-\d+\]\(\)/g, '')
+    )
 }
 
 /**
@@ -219,31 +241,26 @@ function generateSummary(content: string): string {
         if (trimmed.match(/^#{2,}\s+/)) break
 
         // Lines to skip
-        if (!trimmed || trimmed.startsWith('<') || trimmed.startsWith('') || trimmed.startsWith('---')) {
-            if (paragraph) break // End if already has content
+        if (!trimmed) {
             continue
         }
 
         paragraph += (paragraph ? ' ' : '') + trimmed
-
-        // End at appropriate length
-        if (paragraph.length > 200) break
     }
 
     // Remove common patterns
-    let summary = paragraph
+    const summary = paragraph
         .replace(/^The following files were used as context.*?:/i, '')
-        .replace(/^This (?:page|document|section) (?:provides|contains|describes).*?:/i, '')
-        .replace(/<[^>]*>/g, '') // Remove HTML tags
         .replace(/&\w+;/g, ' ') // Remove HTML entities
         .replace(/\s+/g, ' ') // Replace multiple spaces with single space
         .trim()
 
-    // 150 character limit (cut at word boundary)
-    if (summary.length > 150) {
-        const cutIndex = summary.lastIndexOf(' ', 150)
-        summary = summary.substring(0, cutIndex > 0 ? cutIndex : 150) + '...'
-    }
+    // character limit (cut at word boundary)
+    // const maxSummaryLength = 400
+    // if (summary.length > maxSummaryLength) {
+    //     const cutIndex = summary.lastIndexOf(' ', maxSummaryLength)
+    //     summary = summary.substring(0, cutIndex > 0 ? cutIndex : maxSummaryLength) + '...'
+    // }
 
     return summary || 'Summary for this page is not available.'
 }
@@ -290,9 +307,8 @@ export function generateNavigation(pages: MarkdownPage[], repoName: string): str
         return `No wiki pages found for ${repoName}.`
     }
 
-    // Show up to 20 pages
     const pageList = pages
-        .slice(0, 20)
+        // .slice(0, 20)
         .map((page, index) => {
             // Show up to 5 main sections (h2 headings)
             const mainSections =
@@ -316,7 +332,7 @@ From the following wiki pages, select the page that best fits the user's questio
 ${pageList}
 
 ## Selection Method
-Based on the user's question, choose the most relevant page number.`
+Based on the user's question, choose the most relevant page titles.`
 }
 
 /**
@@ -326,23 +342,13 @@ Based on the user's question, choose the most relevant page number.`
  * @returns Content after applying size limit
  */
 export function applySizeLimit(content: string, settings: Settings): string {
-    // If maxTokens is set, prioritize it
-    if (settings.maxTokens && settings.maxTokens > 0) {
-        const estimatedTokens = estimateTokenCount(content)
-        if (estimatedTokens > settings.maxTokens) {
-            const targetLength = Math.floor(settings.maxTokens * 3.5) // More accurate conversion rate
-            return truncatePreservingStructure(content, targetLength)
-        }
-        return content // If within token limit, do not check char limit
+    const maxTokens = settings.maxTokens || 12000
+    const estimatedTokens = estimateTokenCount(content)
+    if (estimatedTokens > maxTokens) {
+        const targetLength = Math.floor(maxTokens * 3.5)
+        return truncatePreservingStructure(content, targetLength)
     }
-
-    // Limit by maxContentSize
-    const maxSize = settings.maxContentSize || 25000
-    if (content.length > maxSize) {
-        return truncatePreservingStructure(content, maxSize)
-    }
-
-    return content
+    return content // If within token limit, do not check char limit
 }
 
 /**
@@ -351,23 +357,12 @@ export function applySizeLimit(content: string, settings: Settings): string {
  * @returns Estimated token count
  */
 function estimateTokenCount(text: string): number {
-    // Todo: Implement more accurate token count estimation
-    // Approximation for GPT-4 tokenizer (assuming mostly English content)
-    // Actual ratio: about 3.5 chars/token (based on research)
+    const tokenLength = encode(text).length
+    return tokenLength
 
     // Simple language detection
-    const japaneseChars = (text.match(/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g) || []).length
-    const codeBlocks = (text.match(/[\s\S]*?/g) || []).join('').length
-
-    let ratio = 4.0 // Default (English)
-
-    if (japaneseChars > text.length * 0.1) {
-        ratio = 3.0 // More than 10% Japanese
-    } else if (codeBlocks > text.length * 0.2) {
-        ratio = 3.5 // More than 20% code blocks
-    }
-
-    return Math.ceil(text.length / ratio)
+    // const ratio = 3.5
+    // return Math.ceil(text.length / ratio)
 }
 
 /**

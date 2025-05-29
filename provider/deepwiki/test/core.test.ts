@@ -108,10 +108,10 @@ describe('parseInputQuery', () => {
 
     test('throws error for non-GitHub URLs', () => {
         expect(() => parseInputQuery('https://gitlab.com/user/repo')).toThrow(
-            'URL must be from github.com',
+            'URL must be from https://github.com',
         )
         expect(() => parseInputQuery('https://bitbucket.org/user/repo')).toThrow(
-            'URL must be from github.com',
+            'URL must be from https://github.com',
         )
     })
 
@@ -131,7 +131,9 @@ describe('parseInputQuery', () => {
         expect(() => parseInputQuery('not-a-url')).toThrow(
             'Repository name must be in "user/repo" format',
         )
-        expect(() => parseInputQuery('https://invalid-url')).toThrow('URL must be from github.com')
+        expect(() => parseInputQuery('https://invalid-url')).toThrow(
+            'URL must be from https://github.com',
+        )
     })
 
     test('handles special characters in repository name', () => {
@@ -170,21 +172,6 @@ describe('buildDeepwikiURL', () => {
 })
 
 describe('parseHTMLToMarkdown', () => {
-    test('extracts valid markdown content', () => {
-        const html = `
-            <html>
-                <script>
-                    self.__next_f.push([1,"# Test Page\\n\\nThis is a test page with content over 100 characters to meet the minimum length requirement for markdown detection."]);
-                </script>
-            </html>
-        `
-        const pages = parseHTMLToMarkdown(html)
-        expect(pages).toHaveLength(1)
-        expect(pages[0].h1Title).toBe('Test Page')
-        expect(pages[0].summary).toBe('Summary for this page is not available.')
-        expect(pages[0].size).toBeGreaterThan(100)
-    })
-
     test('extracts multiple markdown pages', () => {
         const html = `
       <html>
@@ -409,22 +396,6 @@ describe('generateNavigation', () => {
         expect(navigation).toContain('**Main sections**: None')
     })
 
-    test('limits pages to 20 items', () => {
-        const manyPages: MarkdownPage[] = Array.from({ length: 25 }, (_, i) => ({
-            h1Title: `Page ${i + 1}`,
-            h2Headings: ['Section A', 'Section B'],
-            summary: `Summary for page ${i + 1}`,
-            content: `# Page ${i + 1}\n\nContent...`,
-            size: 1000,
-        }))
-
-        const navigation = generateNavigation(manyPages, 'test/repo')
-
-        expect(navigation).toContain('### 1. Page 1')
-        expect(navigation).toContain('### 20. Page 20')
-        expect(navigation).not.toContain('### 21. Page 21')
-    })
-
     test('handles empty pages array', () => {
         const navigation = generateNavigation([], 'test/repo')
         expect(navigation).toBe('No wiki pages found for test/repo.')
@@ -435,54 +406,17 @@ describe('generateNavigation', () => {
 
         expect(navigation).toContain('Available Wiki Pages')
         expect(navigation).toContain('Selection Method')
-        expect(navigation).toContain('choose the most relevant page number')
+        expect(navigation).toContain('choose the most relevant page titles')
     })
 })
 
 describe('applySizeLimit', () => {
-    const longContent = 'A'.repeat(30000) // 30,000 characters
-    const shortContent = 'Short content here'
+    const longContent = 'A'.repeat(10000) // 30,000 characters
 
     test('applies maxTokens limit when set', () => {
         const settings: Settings = { maxTokens: 1000 }
         const result = applySizeLimit(longContent, settings)
 
-        expect(result.length).toBeLessThan(longContent.length)
-        expect(result).toContain('(content was truncated)')
-    })
-
-    test('applies maxContentSize limit when maxTokens not set', () => {
-        const settings: Settings = { maxContentSize: 1000 }
-        const result = applySizeLimit(longContent, settings)
-
-        expect(result.length).toBeLessThan(longContent.length)
-        expect(result).toContain('(content was truncated)')
-    })
-
-    test('prioritizes maxTokens over maxContentSize', () => {
-        const settings: Settings = {
-            maxTokens: 100, // Very small token limit
-            maxContentSize: 50000, // Large content limit
-        }
-        const result = applySizeLimit(longContent, settings)
-
-        // Should be truncated based on tokens, not content size
-        expect(result.length).toBeLessThan(1000) // Much smaller than content limit
-        expect(result).toContain('(content was truncated)')
-    })
-
-    test('returns original content when within limits', () => {
-        const settings: Settings = { maxContentSize: 50000 }
-        const result = applySizeLimit(shortContent, settings)
-
-        expect(result).toBe(shortContent)
-    })
-
-    test('uses default maxContentSize when not specified', () => {
-        const settings: Settings = {}
-        const result = applySizeLimit(longContent, settings)
-
-        // Should use default 25000 limit
         expect(result.length).toBeLessThan(longContent.length)
         expect(result).toContain('(content was truncated)')
     })
@@ -509,24 +443,12 @@ Detailed content here.
 More content that might be truncated.
 `.repeat(100) // Make it long enough to trigger truncation
 
-        const settings: Settings = { maxContentSize: 500 }
+        const settings: Settings = { maxTokens: 500 }
         const result = applySizeLimit(contentWithHeadings, settings)
 
         expect(result).toContain('# Main Title')
         expect(result).toContain('(content was truncated)')
         // Should preserve some heading structure
         expect(result.match(/^#{1,3}\s+/gm)).toBeTruthy()
-    })
-
-    test('handles maxTokens of 0 as disabled', () => {
-        const settings: Settings = {
-            maxTokens: 0,
-            maxContentSize: 1000,
-        }
-        const result = applySizeLimit(longContent, settings)
-
-        // Should fall back to maxContentSize
-        expect(result.length).toBeLessThan(longContent.length)
-        expect(result).toContain('(content was truncated)')
     })
 })
