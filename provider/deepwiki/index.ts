@@ -10,6 +10,7 @@ import type {
 import { createErrorItem, debounce, fetchDeepwikiHTML } from './api.js'
 import {
     applySizeLimit,
+    filterPagesByPageNumbers,
     filterPagesByQuery,
     generateNavigation,
     parseHTMLToMarkdown,
@@ -57,7 +58,7 @@ const deepwikiProvider: Provider = {
         return {
             name: 'deepwiki',
             mentions: {
-                label: 'type <user/repo or githubUrl> [page search query]',
+                label: 'type <user/repo or githubUrl> [page search query or page number]',
             },
         }
     },
@@ -73,7 +74,7 @@ const deepwikiProvider: Provider = {
 
         try {
             // Parse input query
-            const { repoName, searchQuery } = parseInputQuery(params.query || '')
+            const { repoName, searchQuery, pageNumbers } = parseInputQuery(params.query || '')
 
             // Fetch HTML
             const fetchFn = debounce(fetchDeepwikiHTML, validatedSettings.debounceDelay, '')
@@ -90,10 +91,34 @@ const deepwikiProvider: Provider = {
                 )
             }
 
+            // Handle page numbers specification
+            if (pageNumbers) {
+                const filteredPages = filterPagesByPageNumbers(pages, pageNumbers)
+
+                // Return individual page items for specified page numbers
+                return filteredPages.map(page => {
+                    const limitedContent = applySizeLimit(page.content, validatedSettings)
+
+                    return {
+                        title: `${page.h1Title} [${page.size.toLocaleString()}]`,
+                        uri: `https://deepwiki.com/${repoName}#${page.h1Title}`,
+                        description: `${page.summary} (${page.size.toLocaleString()} tokens)`,
+                        data: {
+                            content: limitedContent,
+                            isNavigation: false,
+                        },
+                    }
+                })
+            }
+
             // Generate Navigation vs normal results
             if (!searchQuery && validatedSettings.enableNavigation) {
                 // Return Navigation item for AI to choose from
-                const navigationContent = generateNavigation(pages, repoName)
+                const navigationContent = generateNavigation(
+                    pages,
+                    repoName,
+                    validatedSettings.maxMentionItems,
+                )
 
                 return [
                     {

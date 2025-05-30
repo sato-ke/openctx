@@ -136,11 +136,68 @@ describe('parseInputQuery', () => {
         )
     })
 
+    describe('page numbers', () => {
+        test('parses repository name with page numbers', () => {
+            const result = parseInputQuery('facebook/react 1/4/9/12')
+            expect(result).toEqual({
+                repoName: 'facebook/react',
+                searchQuery: undefined,
+                pageNumbers: [1, 4, 9, 12],
+            })
+        })
+
+        test('handles single page number', () => {
+            const result = parseInputQuery('facebook/react 5')
+            expect(result).toEqual({
+                repoName: 'facebook/react',
+                searchQuery: undefined,
+                pageNumbers: [5],
+            })
+        })
+
+        test('handles page numbers with GitHub URL', () => {
+            const result = parseInputQuery('https://github.com/facebook/react 2/7')
+            expect(result).toEqual({
+                repoName: 'facebook/react',
+                searchQuery: undefined,
+                pageNumbers: [2, 7],
+            })
+        })
+
+        test('treats invalid page number format as search query', () => {
+            const result = parseInputQuery('facebook/react 1/a/3')
+            expect(result).toEqual({
+                repoName: 'facebook/react',
+                searchQuery: '1/a/3',
+                pageNumbers: undefined,
+            })
+        })
+
+        test('treats mixed valid/invalid format as search query', () => {
+            const result = parseInputQuery('facebook/react 1/2/hooks')
+            expect(result).toEqual({
+                repoName: 'facebook/react',
+                searchQuery: '1/2/hooks',
+                pageNumbers: undefined,
+            })
+        })
+
+        test('handles zero and negative numbers as search query', () => {
+            const result = parseInputQuery('facebook/react 0/-1/2')
+            expect(result).toEqual({
+                repoName: 'facebook/react',
+                searchQuery: '0/-1/2',
+                pageNumbers: undefined,
+            })
+        })
+    })
+
     test('handles special characters in repository name', () => {
         const result = parseInputQuery('user-name/repo.name_test')
         expect(result).toEqual({
             repoName: 'user-name/repo.name_test',
             searchQuery: undefined,
+            pageNumbers: undefined,
         })
     })
 
@@ -149,6 +206,7 @@ describe('parseInputQuery', () => {
         expect(result).toEqual({
             repoName: 'user-name/repo.name_test',
             searchQuery: undefined,
+            pageNumbers: undefined,
         })
     })
 })

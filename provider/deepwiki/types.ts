@@ -45,6 +45,8 @@ export interface ParsedQuery {
     repoName: string
     /** Search query (optional) */
     searchQuery?: string
+    /** Page numbers to retrieve (1-based, optional) */
+    pageNumbers?: number[]
 }
 
 /**
@@ -100,6 +102,8 @@ export const PATTERNS = {
     H2_HEADING: /^##\s+(.+)$/gm,
     /** Pattern for repository name */
     REPO_NAME: /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/,
+    /** Pattern for page numbers (e.g., "1/4/9/12" or "5") */
+    PAGE_NUMBERS: /^\d+(?:\/\d+)*$/,
 } as const
 
 /**

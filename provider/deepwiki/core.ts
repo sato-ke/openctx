@@ -6,6 +6,7 @@
 import fuzzysort from 'fuzzysort'
 import { encode } from 'gpt-tokenizer/encoding/cl100k_base'
 import type { MarkdownPage, ParsedQuery, Settings } from './types.js'
+import { PATTERNS } from './types.js'
 
 /**
  * Parse user input into repository name and search query
@@ -25,7 +26,7 @@ export function parseInputQuery(query: string): ParsedQuery {
     // Split by space
     const parts = trimmed.split(/\s+/)
     const firstPart = parts[0]
-    const searchQuery = parts.slice(1).join(' ') || undefined
+    const remainingParts = parts.slice(1).join(' ')
 
     let repoName: string
 
@@ -47,7 +48,26 @@ export function parseInputQuery(query: string): ParsedQuery {
         throw new Error('User name and repository name cannot be empty')
     }
 
-    return { repoName, searchQuery }
+    // Parse search query or page numbers
+    let searchQuery: string | undefined = undefined
+    let pageNumbers: number[] | undefined = undefined
+
+    if (remainingParts) {
+        // Check if it's a page numbers pattern
+        if (PATTERNS.PAGE_NUMBERS.test(remainingParts)) {
+            const numbers = remainingParts.split('/').map(num => Number.parseInt(num, 10))
+            // Validate all numbers are positive integers
+            if (numbers.every(num => Number.isInteger(num) && num > 0)) {
+                pageNumbers = numbers
+            } else {
+                searchQuery = remainingParts
+            }
+        } else {
+            searchQuery = remainingParts
+        }
+    }
+
+    return { repoName, searchQuery, pageNumbers }
 }
 
 /**
@@ -297,18 +317,42 @@ export function filterPagesByQuery(pages: MarkdownPage[], query?: string): Markd
 }
 
 /**
+ * Filter markdown pages by page numbers
+ * @param pages - Array of pages to filter
+ * @param pageNumbers - Array of page numbers (1-based)
+ * @returns Filtered array of pages in the order of specified page numbers
+ */
+export function filterPagesByPageNumbers(pages: MarkdownPage[], pageNumbers: number[]): MarkdownPage[] {
+    const result: MarkdownPage[] = []
+
+    for (const pageNum of pageNumbers) {
+        // Convert to 0-based index and check bounds
+        const index = pageNum - 1
+        if (index >= 0 && index < pages.length) {
+            result.push(pages[index])
+        }
+    }
+
+    return result
+}
+
+/**
  * Generate navigation info for AI
  * @param pages - Array of target pages
  * @param repoName - Repository name
+ * @param maxMentionItems - Maximum number of pages that can be selected
  * @returns Markdown text for navigation
  */
-export function generateNavigation(pages: MarkdownPage[], repoName: string): string {
+export function generateNavigation(
+    pages: MarkdownPage[],
+    repoName: string,
+    maxMentionItems: number,
+): string {
     if (pages.length === 0) {
         return `No wiki pages found for ${repoName}.`
     }
 
     const pageList = pages
-        // .slice(0, 20)
         .map((page, index) => {
             // Show up to 5 main sections (h2 headings)
             const mainSections =
@@ -325,14 +369,17 @@ export function generateNavigation(pages: MarkdownPage[], repoName: string): str
 
     return `This is the wiki for ${repoName}.
 
-From the following wiki pages, select the page that best fits the user's question.
+## How to Access Specific Pages
+- Multiple pages: @deepwiki ${repoName} 1/3/5 (maximum ${maxMentionItems} pages per request)
+- Single page: @deepwiki ${repoName} 17
+- Search pages: @deepwiki ${repoName} search_term
+
+## Selection Method
+Based on the user's question, choose up to ${maxMentionItems} most relevant page titles from the list below.
 
 ## Available Wiki Pages
 
-${pageList}
-
-## Selection Method
-Based on the user's question, choose the most relevant page titles.`
+${pageList}`
 }
 
 /**

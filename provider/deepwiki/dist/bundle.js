@@ -2664,6 +2664,35 @@ var GptEncoding = class _GptEncoding {
 var api = GptEncoding.getEncodingApi("cl100k_base", () => cl100k_base_default);
 var { decode, decodeAsyncGenerator, decodeGenerator, encode, encodeGenerator, isWithinTokenLimit, countTokens, encodeChat, encodeChatGenerator, vocabularySize, setMergeCacheSize, clearMergeCache, estimateCost } = api;
 
+// types.ts
+var DEFAULT_SETTINGS = {
+  maxMentionItems: 5,
+  maxTokens: 3e3,
+  debounceDelay: 300,
+  enableNavigation: true
+};
+var SETTINGS_LIMITS = {
+  maxMentionItems: { min: 1, max: 20 },
+  maxTokens: { min: 1e3, max: 2e4 },
+  debounceDelay: { min: 100, max: 1e3 }
+};
+var PATTERNS = {
+  /** Pattern to extract Next.js RSC chunk */
+  NEXT_F_PUSH: /self\.__next_f\.push\(\[1,"((?:[^"\\]|\\.)*)"\]\)/g,
+  /** Pattern for h1 heading */
+  H1_HEADING: /^#\s+(.+)$/m,
+  /** Pattern for h2 heading */
+  H2_HEADING: /^##\s+(.+)$/gm,
+  /** Pattern for repository name */
+  REPO_NAME: /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/,
+  /** Pattern for page numbers (e.g., "1/4/9/12" or "5") */
+  PAGE_NUMBERS: /^\d+(?:\/\d+)*$/
+};
+var TIMEOUTS = {
+  /** Timeout for fetching HTML (milliseconds) */
+  FETCH_HTML: 3e3
+};
+
 // core.ts
 function parseInputQuery(query) {
   const trimmed = query.trim();
@@ -2672,7 +2701,7 @@ function parseInputQuery(query) {
   }
   const parts = trimmed.split(/\s+/);
   const firstPart = parts[0];
-  const searchQuery = parts.slice(1).join(" ") || void 0;
+  const remainingParts = parts.slice(1).join(" ");
   let repoName;
   if (firstPart.startsWith("http")) {
     repoName = extractRepoFromGitHubURL(firstPart);
@@ -2686,7 +2715,21 @@ function parseInputQuery(query) {
   if (!user.trim() || !repo.trim()) {
     throw new Error("User name and repository name cannot be empty");
   }
-  return { repoName, searchQuery };
+  let searchQuery = void 0;
+  let pageNumbers = void 0;
+  if (remainingParts) {
+    if (PATTERNS.PAGE_NUMBERS.test(remainingParts)) {
+      const numbers = remainingParts.split("/").map((num) => Number.parseInt(num, 10));
+      if (numbers.every((num) => Number.isInteger(num) && num > 0)) {
+        pageNumbers = numbers;
+      } else {
+        searchQuery = remainingParts;
+      }
+    } else {
+      searchQuery = remainingParts;
+    }
+  }
+  return { repoName, searchQuery, pageNumbers };
 }
 function extractRepoFromGitHubURL(url) {
   try {
@@ -2818,7 +2861,17 @@ function filterPagesByQuery(pages, query) {
   });
   return resultsH2Separated;
 }
-function generateNavigation(pages, repoName) {
+function filterPagesByPageNumbers(pages, pageNumbers) {
+  const result = [];
+  for (const pageNum of pageNumbers) {
+    const index = pageNum - 1;
+    if (index >= 0 && index < pages.length) {
+      result.push(pages[index]);
+    }
+  }
+  return result;
+}
+function generateNavigation(pages, repoName, maxMentionItems) {
   if (pages.length === 0) {
     return `No wiki pages found for ${repoName}.`;
   }
@@ -2831,14 +2884,17 @@ function generateNavigation(pages, repoName) {
   }).join("\n\n");
   return `This is the wiki for ${repoName}.
 
-From the following wiki pages, select the page that best fits the user's question.
+## How to Access Specific Pages
+- Multiple pages: @deepwiki ${repoName} 1/3/5 (maximum ${maxMentionItems} pages per request)
+- Single page: @deepwiki ${repoName} 17
+- Search pages: @deepwiki ${repoName} search_term
+
+## Selection Method
+Based on the user's question, choose up to ${maxMentionItems} most relevant page titles from the list below.
 
 ## Available Wiki Pages
 
-${pageList}
-
-## Selection Method
-Based on the user's question, choose the most relevant page titles.`;
+${pageList}`;
 }
 function applySizeLimit(content, settings) {
   const maxTokens = settings.maxTokens || 12e3;
@@ -2882,23 +2938,6 @@ function truncatePreservingStructure(content, maxLength) {
   }
   return result.trim() + "(content was truncated)";
 }
-
-// types.ts
-var DEFAULT_SETTINGS = {
-  maxMentionItems: 5,
-  maxTokens: 3e3,
-  debounceDelay: 300,
-  enableNavigation: true
-};
-var SETTINGS_LIMITS = {
-  maxMentionItems: { min: 1, max: 20 },
-  maxTokens: { min: 1e3, max: 2e4 },
-  debounceDelay: { min: 100, max: 1e3 }
-};
-var TIMEOUTS = {
-  /** Timeout for fetching HTML (milliseconds) */
-  FETCH_HTML: 3e3
-};
 
 // api.ts
 var htmlCache = new QuickLRU({
@@ -2989,7 +3028,7 @@ function validateSettings(settings) {
       ),
       SETTINGS_LIMITS.debounceDelay.max
     ),
-    enableNavigation: settings.enableNavigation !== false
+    enableNavigation: settings.enableNavigation === void 0 ? DEFAULT_SETTINGS.enableNavigation : !!settings.enableNavigation
   };
   return validated;
 }
@@ -2998,7 +3037,7 @@ var deepwikiProvider = {
     return {
       name: "deepwiki",
       mentions: {
-        label: "type <user/repo or githubUrl> [page search query]"
+        label: "type <user/repo or githubUrl> [page search query or page number]"
       }
     };
   },
@@ -3008,7 +3047,7 @@ var deepwikiProvider = {
     }
     const validatedSettings = validateSettings(settings);
     try {
-      const { repoName, searchQuery } = parseInputQuery(params.query || "");
+      const { repoName, searchQuery, pageNumbers } = parseInputQuery(params.query || "");
       const fetchFn = debounce(fetchDeepwikiHTML, validatedSettings.debounceDelay, "");
       const html = await fetchFn(repoName);
       const pages = parseHTMLToMarkdown(html);
@@ -3018,8 +3057,27 @@ var deepwikiProvider = {
           "The specified repository wiki pages do not exist or are not supported by deepwiki.com."
         );
       }
+      if (pageNumbers) {
+        const filteredPages2 = filterPagesByPageNumbers(pages, pageNumbers);
+        return filteredPages2.map((page) => {
+          const limitedContent = applySizeLimit(page.content, validatedSettings);
+          return {
+            title: `${page.h1Title} [${page.size.toLocaleString()}]`,
+            uri: `https://deepwiki.com/${repoName}#${page.h1Title}`,
+            description: `${page.summary} (${page.size.toLocaleString()} tokens)`,
+            data: {
+              content: limitedContent,
+              isNavigation: false
+            }
+          };
+        });
+      }
       if (!searchQuery && validatedSettings.enableNavigation) {
-        const navigationContent = generateNavigation(pages, repoName);
+        const navigationContent = generateNavigation(
+          pages,
+          repoName,
+          validatedSettings.maxMentionItems
+        );
         return [
           {
             title: `${repoName} Wiki Navigation`,

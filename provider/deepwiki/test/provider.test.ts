@@ -77,7 +77,7 @@ describe('deepwikiProvider', () => {
             expect(result).toEqual({
                 name: 'deepwiki',
                 mentions: {
-                    label: 'type <user/repo or githubUrl> [page search query]',
+                    label: 'type <user/repo or githubUrl> [page search query or page number]',
                 },
             })
         })
@@ -196,6 +196,88 @@ describe('deepwikiProvider', () => {
             const result = await deepwikiProvider.mentions({ query: 'test/repo search' }, settings)
 
             expect(result.length).toBeLessThanOrEqual(2)
+        })
+
+        test('returns specific pages when page numbers provided', async () => {
+            const mockHtml = `
+                <html>
+                    <script>
+                        self.__next_f.push([1,"# Overview\\n\\nThis is the overview page with sufficient content to be detected as markdown content by our parser."]);
+                        self.__next_f.push([1,"# API Reference\\n\\n## REST API\\n\\nThis is the API documentation page with detailed information about the REST API endpoints."]);
+                        self.__next_f.push([1,"# Getting Started\\n\\n## Installation\\n\\nThis is the getting started guide with installation instructions and setup information."]);
+                    </script>
+                </html>
+            `
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                text: () => Promise.resolve(mockHtml),
+            })
+
+            const result = await deepwikiProvider.mentions({ query: 'facebook/react 1/3' }, {})
+
+            expect(result).toHaveLength(2)
+            expect(result[0].title).toContain('Overview')
+            expect(result[1].title).toContain('Getting Started')
+            expect(result[0]?.data?.isNavigation).toBe(false)
+            expect(result[1]?.data?.isNavigation).toBe(false)
+        })
+
+        test('handles single page number', async () => {
+            const mockHtml = `
+                <html>
+                    <script>
+                        self.__next_f.push([1,"# Overview\\n\\nThis is the overview page with sufficient content to be detected as markdown content by our parser."]);
+                        self.__next_f.push([1,"# API Reference\\n\\n## REST API\\n\\nThis is the API documentation page with detailed information about the REST API endpoints."]);
+                    </script>
+                </html>
+            `
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                text: () => Promise.resolve(mockHtml),
+            })
+
+            const result = await deepwikiProvider.mentions({ query: 'facebook/react 2' }, {})
+
+            expect(result).toHaveLength(1)
+            expect(result[0].title).toContain('API Reference')
+            expect(result[0]?.data?.isNavigation).toBe(false)
+        })
+
+        test('handles out of range page numbers gracefully', async () => {
+            const mockHtml = `
+                <html>
+                    <script>
+                        self.__next_f.push([1,"# Overview\\n\\nThis is the overview page with sufficient content to be detected as markdown content by our parser."]);
+                    </script>
+                </html>
+            `
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                text: () => Promise.resolve(mockHtml),
+            })
+
+            const result = await deepwikiProvider.mentions({ query: 'facebook/react 1/999' }, {})
+
+            expect(result).toHaveLength(1)
+            expect(result[0].title).toContain('Overview')
+        })
+
+        test('returns empty array when all page numbers are out of range', async () => {
+            const mockHtml = `
+                <html>
+                    <script>
+                        self.__next_f.push([1,"# Overview\\n\\nThis is the overview page with sufficient content to be detected as markdown content by our parser."]);
+                    </script>
+                </html>
+            `
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                text: () => Promise.resolve(mockHtml),
+            })
+
+            const result = await deepwikiProvider.mentions({ query: 'facebook/react 999/1000' }, {})
+
+            expect(result).toEqual([])
         })
 
         test('disables navigation when enableNavigation is false', async () => {
