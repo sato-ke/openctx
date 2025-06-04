@@ -1,6 +1,6 @@
 # deepwiki
 
-[OpenCtx](https://openctx.org) context provider for bringing GitHub repository wiki pages from deepwiki.com into code AI and editors.
+[OpenCtx](https://openctx.org) context provider for bringing GitHub repository wiki pages and chat histories from deepwiki.com into code AI and editors.
 
 ## Usage
 
@@ -20,6 +20,7 @@ Configure your OpenCtx client:
 
 ### How to use in your editor
 
+#### Repository Wiki Pages
 - To browse repository wiki pages, type a query in the form:
   - `@deepwiki <user/repo>` - Shows navigation menu for all wiki pages
   - `@deepwiki <user/repo> [search query]` - Searches specific wiki pages
@@ -34,8 +35,16 @@ Examples:
 - `@deepwiki https://github.com/microsoft/vscode` - Browse VS Code wiki
 - `@deepwiki vercel/next.js api` - Search Next.js wiki for API documentation
 
+#### Chat Histories
+- To access DeepWiki chat histories:
+  - `@deepwiki <deepwiki-chat-url>` - Imports chat history from DeepWiki sessions
+
+Examples:
+- `@deepwiki https://deepwiki.com/search/_xxxxx-yyyyy-zzzzz` - Imports chat session history
+
 ## Features
 
+### Repository Wiki Pages
 - **Smart Navigation**: When no search query is provided, shows an AI-assisted navigation menu of all available wiki pages
 - **Page Number Selection**: AI can directly access specific pages using numbers from navigation (e.g., `1/3/5`)
 - **Fuzzy Search**: Intelligent search across page titles, headings, and content summaries
@@ -43,14 +52,24 @@ Examples:
 - **GitHub URL Support**: Accepts both `user/repo` format and full GitHub URLs
 - **Caching**: Built-in caching to improve performance and reduce API calls
 
+### Chat Histories
+- **Chat Session Import**: Import complete chat histories from DeepWiki sessions using session URLs
+- **Multi-Query Support**: Handles chat sessions with multiple queries and responses
+
 ## Context included
 
-Repository wiki documentation:
+### Repository Wiki Documentation:
 - Page titles and section headings (h1, h2)
 - Content summaries from h1 headings
 - Full markdown content with size limits applied
 - Navigation assistance for discovering relevant pages
 - Direct page access by number for efficient content retrieval
+
+### Chat History Content:
+- Chat session titles (cleaned of context tags)
+- User questions from each query in the session
+- AI responses with chunk data combined
+- Structured presentation with query numbering
 
 ## Configuration
 
@@ -73,9 +92,11 @@ To optimize AI interaction with deepwiki provider, add this to your `cody.chat.p
 - Always start with navigation (`@deepwiki <user/repo>`) to understand available content
 - Page numbers are provider-generated and only visible in navigation responses
 - Use specific page numbers for targeted content retrieval
+- Chat histories can provide valuable context from previous conversations about the same codebase
 
 ## How it works
 
+### Repository Wiki Pages
 1. **Input Parsing**: Accepts repository names in `user/repo` format or GitHub URLs
 2. **Query Processing**: Detects page numbers (e.g., `1/3/5`), search queries, or requests for navigation
 3. **Content Fetching**: Retrieves wiki content from deepwiki.com
@@ -84,8 +105,17 @@ To optimize AI interaction with deepwiki provider, add this to your `cody.chat.p
 6. **Content Optimization**: Applies token limits while preserving document structure
 7. **AI Integration**: Provides structured content for AI assistants
 
+### Chat Histories
+1. **URL Parsing**: Extracts session ID from DeepWiki chat URLs (`/search/{sessionId}`)
+2. **API Fetching**: Retrieves chat history data from DeepWiki API endpoint
+3. **Data Processing**: Parses JSON response containing queries and responses
+4. **Content Cleaning**: Removes `<relevant_context>` tags from titles and questions
+5. **Token Optimization**: Applies size limits for chat
+6. **Formatting**: Structures content with query numbering and clear sections
+
 ## Limitations
 
+### Repository Wiki Pages
 ⚠️ **Important**: This provider only works with repositories that meet the following criteria:
 
 - **Public repositories only**: Private repositories are not accessible through this provider
@@ -94,9 +124,18 @@ To optimize AI interaction with deepwiki provider, add this to your `cody.chat.p
 
 If you encounter a "Repository not found" error, it likely means the repository is either private or not indexed by deepwiki.com.
 
+### Chat Histories
+⚠️ **Important**: Chat history access has the following limitations:
+
+- **Valid session IDs only**: The session ID must be from an actual DeepWiki chat session
+- **Accessible chats only**: Private or restricted chat sessions may not be accessible
+- **API availability**: Depends on DeepWiki API availability and rate limits
+
 ## Use Cases
 
-This provider supports three main workflow patterns for accessing wiki documentation:
+This provider supports multiple workflow patterns for accessing both wiki documentation and chat histories:
+
+### Repository Wiki Documentation
 
 ### 1. Search-Based Access
 **Goal**: Find specific information using search terms.
@@ -136,6 +175,25 @@ This provider supports three main workflow patterns for accessing wiki documenta
 4. AI: Let me get the relevant documentation about IDE integration.
   @deepwiki sourcegraph/cody 2/17/18/23
 5. AI: "Based on the VS Code Extension, Agent Architecture, and JetBrains integration pages, here's a comprehensive overview..."
+
+### Chat History Integration
+
+#### Use Case: Learning from Previous Conversations
+**Goal**: Import context from previous DeepWiki conversations to build upon existing analysis.
+
+**Steps**:
+1. **User**: Read a DeepWiki chat URL and use `@deepwiki <chat-url>`
+2. **AI**: Analyzes the imported chat history and understands the previous context
+3. **User**: "Based on this previous conversation, help me implement the suggested solution"
+4. **AI**: Uses the chat history context to provide more informed assistance
+
+**Best for**: Continuing work from previous research sessions, learning from expert conversations, building upon previous analysis.
+
+**Example**:
+1. User: @deepwiki https://deepwiki.com/search/_xxxxx-yyyyy-zzzzz
+2. AI: "I can see this chat discussed code search functionality in GitHub MCP Server, covering search_code tools, grep functionality, and implementation patterns..."
+3. User: "Help me implement similar search functionality in my project based on this conversation"
+4. AI: Provides implementation guidance based on the patterns and solutions discussed in the chat history
 
 ## Development
 - License: Apache 2.0
