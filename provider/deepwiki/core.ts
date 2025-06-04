@@ -444,11 +444,11 @@ export function applySizeLimit(content: string, settings: Settings): string {
     if (estimatedTokens > maxTokens) {
         const targetLength = Math.floor(maxTokens * 3.5)
         const truncated = truncatePreservingStructure(content, targetLength)
-        const estimatedTokens = estimateTokenCount(truncated)
+        const estimatedTokensAfterFirstPass = estimateTokenCount(truncated)
 
-        if (estimatedTokens > maxTokens) {
-            const targetLength = Math.floor(maxTokens * 3)
-            return truncatePreservingStructure(truncated, targetLength)
+        if (estimatedTokensAfterFirstPass > maxTokens) {
+            const secondPassTargetLength = Math.floor(maxTokens * 3)
+            return truncatePreservingStructure(truncated, secondPassTargetLength)
         }
         return truncated
     }
