@@ -50,6 +50,87 @@ export interface ParsedQuery {
 }
 
 /**
+ * Parsed chat URL result
+ */
+export interface ParsedChatQuery {
+    /** Type identifier for chat queries */
+    type: 'chat'
+    /** Session ID from the chat URL */
+    sessionId: string
+}
+
+/**
+ * Combined parsed query result
+ */
+export type ParsedInput = ParsedQuery | ParsedChatQuery
+
+/**
+ * Chat history response item types
+ */
+export interface ChatResponseChunk {
+    type: 'chunk'
+    data: string
+}
+
+export interface ChatResponseReference {
+    type: 'reference'
+    data: {
+        file_path: string
+        range_start: number
+        range_end: number
+    }
+}
+
+export interface ChatResponseFileContents {
+    type: 'file_contents'
+    data: {
+        file_path: string
+        contents: string
+    }
+}
+
+export interface ChatResponseLoadingIndexes {
+    type: 'loading_indexes'
+    data: unknown
+}
+
+export interface ChatResponseStats {
+    type: 'stats'
+    data: unknown
+}
+
+export interface ChatResponseDone {
+    type: 'done'
+}
+
+export type ChatResponseItem = 
+    | ChatResponseChunk 
+    | ChatResponseReference 
+    | ChatResponseFileContents
+    | ChatResponseLoadingIndexes
+    | ChatResponseStats
+    | ChatResponseDone
+
+/**
+ * Chat query structure from the API
+ */
+export interface ChatQuery {
+    user_query: string
+    use_knowledge: boolean
+    engine_id: string
+    repo_context_ids: string[]
+    response: ChatResponseItem[]
+}
+
+/**
+ * Chat history data structure from the API
+ */
+export interface ChatHistoryData {
+    title: string
+    queries: ChatQuery[]
+}
+
+/**
  * Data structure returned by mentions()
  */
 export interface DeepwikiMentionData {

@@ -7,7 +7,7 @@ import type {
     MetaResult,
     Provider,
 } from '@openctx/provider'
-import { createErrorItem, debounce, fetchDeepwikiHTML } from './api.js'
+import { createErrorItem, debounce, fetchDeepwikiHTML, fetchChatHistory } from './api.js'
 import {
     applySizeLimit,
     filterPagesByPageNumbers,
@@ -15,6 +15,8 @@ import {
     generateNavigation,
     parseHTMLToMarkdown,
     parseInputQuery,
+    formatChatHistory,
+    cleanTitle,
 } from './core.js'
 import type { DeepwikiMentionData, Settings } from './types.js'
 import { DEFAULT_SETTINGS, SETTINGS_LIMITS } from './types.js'
@@ -58,7 +60,7 @@ const deepwikiProvider: Provider = {
         return {
             name: 'deepwiki',
             mentions: {
-                label: 'type <user/repo or githubUrl> [page search query or page number]',
+                label: 'type <user/repo or githubUrl or deepwiki chat URL> [page search query or page number]',
             },
         }
     },
@@ -74,7 +76,32 @@ const deepwikiProvider: Provider = {
 
         try {
             // Parse input query
-            const { repoName, searchQuery, pageNumbers } = parseInputQuery(params.query || '')
+            const parsedInput = parseInputQuery(params.query || '')
+
+            // Handle chat history queries
+            if ('type' in parsedInput && parsedInput.type === 'chat') {
+                const chatData = await fetchChatHistory(parsedInput.sessionId)
+                const formattedContent = formatChatHistory(chatData, validatedSettings)
+                
+                return [
+                    {
+                        title: `Chat History: ${cleanTitle(chatData.title)}`,
+                        uri: `https://deepwiki.com/search/${parsedInput.sessionId}`,
+                        description: `Chat history with ${chatData.queries.length} queries`,
+                        data: {
+                            content: formattedContent,
+                            isNavigation: false,
+                        },
+                    },
+                ]
+            }
+
+            // Handle repository queries (type narrowing ensures this is ParsedQuery)
+            if ('type' in parsedInput) {
+                // This should never happen due to the check above, but TypeScript needs this
+                throw new Error('Unexpected chat query in repository handling path')
+            }
+            const { repoName, searchQuery, pageNumbers } = parsedInput
 
             // Fetch HTML
             const fetchFn = debounce(fetchDeepwikiHTML, validatedSettings.debounceDelay, '')

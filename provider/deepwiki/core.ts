@@ -5,17 +5,17 @@
 
 import fuzzysort from 'fuzzysort'
 import { encode } from 'gpt-tokenizer/encoding/cl100k_base'
-import type { MarkdownPage, ParsedQuery, Settings } from './types.js'
+import type { MarkdownPage, ParsedInput, ChatHistoryData, ChatResponseItem, Settings } from './types.js'
 import { PATTERNS } from './types.js'
 
 /**
- * Parse user input into repository name and search query
- * Supports both "user/repo" format and GitHub URLs
- * @param query - Input in the form "user/repo [search query]" or "https://github.com/user/repo/path [search query]"
+ * Parse user input into repository name, search query, or chat URL
+ * Supports "user/repo" format, GitHub URLs, and DeepWiki chat URLs
+ * @param query - Input in the form "user/repo [search query]", GitHub URL, or DeepWiki chat URL
  * @returns Parsed result
  * @throws Error - If the input format is invalid
  */
-export function parseInputQuery(query: string): ParsedQuery {
+export function parseInputQuery(query: string): ParsedInput {
     const trimmed = query.trim()
 
     // Check for empty string
@@ -30,8 +30,20 @@ export function parseInputQuery(query: string): ParsedQuery {
 
     let repoName: string
 
-    // Check if it's a GitHub URL
+    // Check if it's a URL
     if (firstPart.startsWith('http')) {
+        // Check if it looks like a chat URL (contains /search/)
+        if (firstPart.includes('/search/')) {
+            // If it contains /search/, it should be a DeepWiki chat URL
+            const sessionId = extractSessionIdFromURL(firstPart)
+            return { type: 'chat', sessionId }
+        }
+        // Check if it's any other DeepWiki URL
+        if (firstPart.includes('deepwiki.com')) {
+            // It's a DeepWiki URL but not a chat URL
+            throw new Error('DeepWiki URL must contain /search/{sessionId}')
+        }
+        // Otherwise treat as GitHub URL
         repoName = extractRepoFromGitHubURL(firstPart)
     } else {
         repoName = firstPart
@@ -68,6 +80,44 @@ export function parseInputQuery(query: string): ParsedQuery {
     }
 
     return { repoName, searchQuery, pageNumbers }
+}
+
+/**
+ * Extract session ID from DeepWiki chat URL
+ * @param url - DeepWiki chat URL like "https://deepwiki.com/search/{sessionId}"
+ * @returns Session ID
+ * @throws Error - If URL format is invalid
+ */
+function extractSessionIdFromURL(url: string): string {
+    try {
+        const urlObj = new URL(url)
+
+        // Check if it's a DeepWiki URL
+        if (urlObj.hostname !== 'deepwiki.com') {
+            throw new Error('URL must be from https://deepwiki.com')
+        }
+
+        // Extract session ID from path /search/{sessionId}
+        const pathParts = urlObj.pathname.split('/')
+        const searchIndex = pathParts.findIndex(part => part === 'search')
+
+        if (searchIndex === -1 || searchIndex + 1 >= pathParts.length) {
+            throw new Error('DeepWiki URL must contain /search/{sessionId}')
+        }
+
+        const sessionId = pathParts[searchIndex + 1]
+
+        if (!sessionId || sessionId.trim() === '') {
+            throw new Error('Session ID cannot be empty')
+        }
+
+        return sessionId
+    } catch (error) {
+        if (error instanceof Error) {
+            throw error
+        }
+        throw new Error('Invalid DeepWiki chat URL format')
+    }
 }
 
 /**
@@ -393,7 +443,14 @@ export function applySizeLimit(content: string, settings: Settings): string {
     const estimatedTokens = estimateTokenCount(content)
     if (estimatedTokens > maxTokens) {
         const targetLength = Math.floor(maxTokens * 3.5)
-        return truncatePreservingStructure(content, targetLength)
+        const truncated = truncatePreservingStructure(content, targetLength)
+        const estimatedTokensAfterFirstPass = estimateTokenCount(truncated)
+
+        if (estimatedTokensAfterFirstPass > maxTokens) {
+            const secondPassTargetLength = Math.floor(maxTokens * 3)
+            return truncatePreservingStructure(truncated, secondPassTargetLength)
+        }
+        return truncated
     }
     return content // If within token limit, do not check char limit
 }
@@ -457,3 +514,64 @@ function truncatePreservingStructure(content: string, maxLength: number): string
 
     return result.trim() + '(content was truncated)'
 }
+
+/**
+ * Clean title by removing <relevant_context> tags and their content
+ * @param title - Original title with possible context tags
+ * @returns Cleaned title
+ */
+export function cleanTitle(title: string): string {
+    // Remove <relevant_context>...</relevant_context> tags and their content
+    return title.replace(/<relevant_context>.*?<\/relevant_context>/g, '').trim()
+}
+
+/**
+ * Format chat history data for OpenCtx
+ * @param chatData - Chat history data from API
+ * @param settings - Settings for token limits
+ * @returns Formatted markdown content
+ */
+export function formatChatHistory(chatData: ChatHistoryData, settings: Settings): string {
+    if (!chatData.queries || chatData.queries.length === 0) {
+        return 'No chat history available.'
+    }
+
+    // Clean up the title by removing <relevant_context> tags
+    const cleanedTitle = cleanTitle(chatData.title)
+    let result = `# ${cleanedTitle}\n\n`
+
+    for (let i = 0; i < chatData.queries.length; i++) {
+        const query = chatData.queries[i]
+
+        let queryContent = `## Query ${i + 1}\n\n`
+        queryContent += `**User Question:** ${cleanTitle(query.user_query)}\n\n`
+
+        // Extract and combine chunk responses
+        const chunks = extractChunksFromResponse(query.response)
+        if (chunks.length > 0) {
+            queryContent += `**AI Response:**\n${chunks.join('')}\n\n`
+        }
+
+        // Skip Code References to reduce token usage
+
+        queryContent += '---\n\n'
+
+        // Apply size limit to each query individually
+        result += queryContent
+    }
+    result = applySizeLimit(result, settings)
+
+    return result.trim()
+}
+
+/**
+ * Extract chunk data from chat response
+ * @param response - Array of response items
+ * @returns Array of chunk strings
+ */
+function extractChunksFromResponse(response: ChatResponseItem[]): string[] {
+    return response
+        .filter((item): item is { type: 'chunk'; data: string } => item.type === 'chunk')
+        .map(item => item.data)
+}
+

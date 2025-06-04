@@ -77,7 +77,7 @@ describe('deepwikiProvider', () => {
             expect(result).toEqual({
                 name: 'deepwiki',
                 mentions: {
-                    label: 'type <user/repo or githubUrl> [page search query or page number]',
+                    label: 'type <user/repo or githubUrl or deepwiki chat URL> [page search query or page number]',
                 },
             })
         })
