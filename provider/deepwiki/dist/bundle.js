@@ -2704,6 +2704,13 @@ function parseInputQuery(query) {
   const remainingParts = parts.slice(1).join(" ");
   let repoName;
   if (firstPart.startsWith("http")) {
+    if (firstPart.includes("/search/")) {
+      const sessionId = extractSessionIdFromURL(firstPart);
+      return { type: "chat", sessionId };
+    }
+    if (firstPart.includes("deepwiki.com")) {
+      throw new Error("DeepWiki URL must contain /search/{sessionId}");
+    }
     repoName = extractRepoFromGitHubURL(firstPart);
   } else {
     repoName = firstPart;
@@ -2730,6 +2737,29 @@ function parseInputQuery(query) {
     }
   }
   return { repoName, searchQuery, pageNumbers };
+}
+function extractSessionIdFromURL(url) {
+  try {
+    const urlObj = new URL(url);
+    if (urlObj.hostname !== "deepwiki.com") {
+      throw new Error("URL must be from https://deepwiki.com");
+    }
+    const pathParts = urlObj.pathname.split("/");
+    const searchIndex = pathParts.findIndex((part) => part === "search");
+    if (searchIndex === -1 || searchIndex + 1 >= pathParts.length) {
+      throw new Error("DeepWiki URL must contain /search/{sessionId}");
+    }
+    const sessionId = pathParts[searchIndex + 1];
+    if (!sessionId || sessionId.trim() === "") {
+      throw new Error("Session ID cannot be empty");
+    }
+    return sessionId;
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error("Invalid DeepWiki chat URL format");
+  }
 }
 function extractRepoFromGitHubURL(url) {
   try {
@@ -2901,7 +2931,13 @@ function applySizeLimit(content, settings) {
   const estimatedTokens = estimateTokenCount(content);
   if (estimatedTokens > maxTokens) {
     const targetLength = Math.floor(maxTokens * 3.5);
-    return truncatePreservingStructure(content, targetLength);
+    const truncated = truncatePreservingStructure(content, targetLength);
+    const estimatedTokens2 = estimateTokenCount(truncated);
+    if (estimatedTokens2 > maxTokens) {
+      const targetLength2 = Math.floor(maxTokens * 3);
+      return truncatePreservingStructure(truncated, targetLength2);
+    }
+    return truncated;
   }
   return content;
 }
@@ -2937,6 +2973,41 @@ function truncatePreservingStructure(content, maxLength) {
     currentLength += lineLength;
   }
   return result.trim() + "(content was truncated)";
+}
+function cleanTitle(title) {
+  return title.replace(/<relevant_context>.*?<\/relevant_context>/g, "").trim();
+}
+function formatChatHistory(chatData, settings) {
+  if (!chatData.queries || chatData.queries.length === 0) {
+    return "No chat history available.";
+  }
+  const cleanedTitle = cleanTitle(chatData.title);
+  let result = `# ${cleanedTitle}
+
+`;
+  for (let i = 0; i < chatData.queries.length; i++) {
+    const query = chatData.queries[i];
+    let queryContent = `## Query ${i + 1}
+
+`;
+    queryContent += `**User Question:** ${cleanTitle(query.user_query)}
+
+`;
+    const chunks = extractChunksFromResponse(query.response);
+    if (chunks.length > 0) {
+      queryContent += `**AI Response:**
+${chunks.join("")}
+
+`;
+    }
+    queryContent += "---\n\n";
+    result += queryContent;
+  }
+  result = applySizeLimit(result, settings);
+  return result.trim();
+}
+function extractChunksFromResponse(response) {
+  return response.filter((item) => item.type === "chunk").map((item) => item.data);
 }
 
 // api.ts
@@ -3006,6 +3077,43 @@ function createErrorItem(title, description) {
     }
   ];
 }
+async function fetchChatHistory(sessionId) {
+  const url = `https://api.devin.ai/ada/query/${sessionId}`;
+  try {
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(TIMEOUTS.FETCH_HTML),
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+      }
+    });
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error("Chat session not found");
+      }
+      throw new Error(`Failed to fetch chat history: ${response.status} ${response.statusText}`);
+    }
+    const data = await response.json();
+    if (!data || typeof data !== "object") {
+      throw new Error("Invalid chat history data format");
+    }
+    if (!("title" in data) || !("queries" in data) || !Array.isArray(data.queries)) {
+      throw new Error("Missing required fields in chat history");
+    }
+    return data;
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.name === "TimeoutError") {
+        throw new Error("Connection to DeepWiki API timed out");
+      }
+      if (error.name === "AbortError") {
+        throw new Error("Request to DeepWiki API was aborted");
+      }
+      throw error;
+    }
+    throw new Error("Unknown error occurred while fetching chat history");
+  }
+}
 
 // index.ts
 function validateSettings(settings) {
@@ -3037,7 +3145,7 @@ var deepwikiProvider = {
     return {
       name: "deepwiki",
       mentions: {
-        label: "type <user/repo or githubUrl> [page search query or page number]"
+        label: "type <user/repo or githubUrl or deepwiki chat URL> [page search query or page number]"
       }
     };
   },
@@ -3047,7 +3155,26 @@ var deepwikiProvider = {
     }
     const validatedSettings = validateSettings(settings);
     try {
-      const { repoName, searchQuery, pageNumbers } = parseInputQuery(params.query || "");
+      const parsedInput = parseInputQuery(params.query || "");
+      if ("type" in parsedInput && parsedInput.type === "chat") {
+        const chatData = await fetchChatHistory(parsedInput.sessionId);
+        const formattedContent = formatChatHistory(chatData, validatedSettings);
+        return [
+          {
+            title: `Chat History: ${cleanTitle(chatData.title)}`,
+            uri: `https://deepwiki.com/search/${parsedInput.sessionId}`,
+            description: `Chat history with ${chatData.queries.length} queries`,
+            data: {
+              content: formattedContent,
+              isNavigation: false
+            }
+          }
+        ];
+      }
+      if ("type" in parsedInput) {
+        throw new Error("Unexpected chat query in repository handling path");
+      }
+      const { repoName, searchQuery, pageNumbers } = parsedInput;
       const fetchFn = debounce(fetchDeepwikiHTML, validatedSettings.debounceDelay, "");
       const html = await fetchFn(repoName);
       const pages = parseHTMLToMarkdown(html);

@@ -1,6 +1,6 @@
 import QuickLRU from 'quick-lru'
 import { buildDeepwikiURL } from './core.js'
-import type { MentionsResult } from './types.js'
+import type { MentionsResult, ChatHistoryData } from './types.js'
 import { TIMEOUTS } from './types.js'
 
 // Cache for HTML responses
@@ -123,5 +123,56 @@ export function getCacheStats(): { size: number; maxSize: number } {
     return {
         size: htmlCache.size,
         maxSize: htmlCache.maxSize,
+    }
+}
+
+/**
+ * Fetch chat history from DeepWiki API
+ * @param sessionId - Session ID from chat URL
+ * @returns Chat history data
+ * @throws Error - If fetch fails or times out
+ */
+export async function fetchChatHistory(sessionId: string): Promise<ChatHistoryData> {
+    const url = `https://api.devin.ai/ada/query/${sessionId}`
+
+    try {
+        const response = await fetch(url, {
+            signal: AbortSignal.timeout(TIMEOUTS.FETCH_HTML),
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+            },
+        })
+
+        if (!response.ok) {
+            if (response.status === 404) {
+                throw new Error('Chat session not found')
+            }
+            throw new Error(`Failed to fetch chat history: ${response.status} ${response.statusText}`)
+        }
+
+        const data = await response.json()
+        
+        // Validate response structure
+        if (!data || typeof data !== 'object') {
+            throw new Error('Invalid chat history data format')
+        }
+
+        if (!('title' in data) || !('queries' in data) || !Array.isArray(data.queries)) {
+            throw new Error('Missing required fields in chat history')
+        }
+
+        return data as ChatHistoryData
+    } catch (error) {
+        if (error instanceof Error) {
+            if (error.name === 'TimeoutError') {
+                throw new Error('Connection to DeepWiki API timed out')
+            }
+            if (error.name === 'AbortError') {
+                throw new Error('Request to DeepWiki API was aborted')
+            }
+            throw error
+        }
+        throw new Error('Unknown error occurred while fetching chat history')
     }
 }

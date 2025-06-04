@@ -10,8 +10,10 @@ import {
     generateNavigation,
     parseHTMLToMarkdown,
     parseInputQuery,
+    formatChatHistory,
+    cleanTitle,
 } from '../core.js'
-import type { MarkdownPage, Settings } from '../types.js'
+import type { MarkdownPage, Settings, ChatHistoryData } from '../types.js'
 
 describe('parseInputQuery', () => {
     test('parses valid repository name', () => {
@@ -134,6 +136,67 @@ describe('parseInputQuery', () => {
         expect(() => parseInputQuery('https://invalid-url')).toThrow(
             'URL must be from https://github.com',
         )
+    })
+
+    describe('chat URLs', () => {
+        test('parses valid DeepWiki chat URL', () => {
+            const result = parseInputQuery('https://deepwiki.com/search/abc123-def456')
+            expect(result).toEqual({
+                type: 'chat',
+                sessionId: 'abc123-def456',
+            })
+        })
+
+        test('parses DeepWiki chat URL with UUID session ID', () => {
+            const result = parseInputQuery('https://deepwiki.com/search/_57f549cc-8544-4567-b91f-e8c94fa59388')
+            expect(result).toEqual({
+                type: 'chat',
+                sessionId: '_57f549cc-8544-4567-b91f-e8c94fa59388',
+            })
+        })
+
+        test('parses DeepWiki chat URL with query parameters', () => {
+            const result = parseInputQuery('https://deepwiki.com/search/session123?foo=bar')
+            expect(result).toEqual({
+                type: 'chat',
+                sessionId: 'session123',
+            })
+        })
+
+        test('parses DeepWiki chat URL with trailing slash', () => {
+            const result = parseInputQuery('https://deepwiki.com/search/session123/')
+            expect(result).toEqual({
+                type: 'chat',
+                sessionId: 'session123',
+            })
+        })
+
+        test('throws error for non-DeepWiki URLs with search path', () => {
+            expect(() => parseInputQuery('https://example.com/search/session123')).toThrow(
+                'URL must be from https://deepwiki.com',
+            )
+        })
+
+        test('throws error for DeepWiki URL without search path', () => {
+            expect(() => parseInputQuery('https://deepwiki.com/other/path')).toThrow(
+                'DeepWiki URL must contain /search/{sessionId}',
+            )
+        })
+
+        test('throws error for DeepWiki URL without session ID', () => {
+            expect(() => parseInputQuery('https://deepwiki.com/search/')).toThrow(
+                'Session ID cannot be empty',
+            )
+            expect(() => parseInputQuery('https://deepwiki.com/search')).toThrow(
+                'DeepWiki URL must contain /search/{sessionId}',
+            )
+        })
+
+        test('throws error for empty session ID', () => {
+            expect(() => parseInputQuery('https://deepwiki.com/search/ ')).toThrow(
+                'Session ID cannot be empty',
+            )
+        })
     })
 
     describe('page numbers', () => {
@@ -418,7 +481,7 @@ describe('generateNavigation', () => {
     ]
 
     test('generates navigation for normal pages', () => {
-        const navigation = generateNavigation(mockPages, 'facebook/react')
+        const navigation = generateNavigation(mockPages, 'facebook/react', 5)
 
         expect(navigation).toContain('facebook/react')
         expect(navigation).toContain('### 1. Overview')
@@ -430,7 +493,7 @@ describe('generateNavigation', () => {
     })
 
     test('limits h2 headings to 5 items', () => {
-        const navigation = generateNavigation(mockPages, 'test/repo')
+        const navigation = generateNavigation(mockPages, 'test/repo', 5)
 
         // API Reference has 6 h2 headings, should show first 5 + "..."
         expect(navigation).toContain(
@@ -450,21 +513,21 @@ describe('generateNavigation', () => {
             },
         ]
 
-        const navigation = generateNavigation(pagesWithoutH2, 'test/repo')
+        const navigation = generateNavigation(pagesWithoutH2, 'test/repo', 5)
         expect(navigation).toContain('**Main sections**: None')
     })
 
     test('handles empty pages array', () => {
-        const navigation = generateNavigation([], 'test/repo')
+        const navigation = generateNavigation([], 'test/repo', 5)
         expect(navigation).toBe('No wiki pages found for test/repo.')
     })
 
     test('includes selection instructions', () => {
-        const navigation = generateNavigation(mockPages, 'facebook/react')
+        const navigation = generateNavigation(mockPages, 'facebook/react', 5)
 
         expect(navigation).toContain('Available Wiki Pages')
         expect(navigation).toContain('Selection Method')
-        expect(navigation).toContain('choose the most relevant page titles')
+        expect(navigation).toContain('choose up to 5 most relevant page titles')
     })
 })
 
@@ -508,5 +571,241 @@ More content that might be truncated.
         expect(result).toContain('(content was truncated)')
         // Should preserve some heading structure
         expect(result.match(/^#{1,3}\s+/gm)).toBeTruthy()
+    })
+})
+
+describe('formatChatHistory', () => {
+    test('formats basic chat history', () => {
+        const chatData: ChatHistoryData = {
+            title: 'Test Chat Session',
+            queries: [
+                {
+                    user_query: 'How do I implement a React hook?',
+                    use_knowledge: true,
+                    engine_id: 'test',
+                    repo_context_ids: ['repo1'],
+                    response: [
+                        { type: 'chunk', data: 'You can implement a React hook by ' },
+                        { type: 'chunk', data: 'creating a function that starts with "use".' },
+                    ],
+                },
+            ],
+        }
+
+        const result = formatChatHistory(chatData, { maxTokens: 3000 })
+
+        expect(result).toContain('# Test Chat Session')
+        expect(result).toContain('## Query 1')
+        expect(result).toContain('**User Question:** How do I implement a React hook?')
+        expect(result).toContain('**AI Response:**')
+        expect(result).toContain('You can implement a React hook by creating a function that starts with "use".')
+    })
+
+    test('formats chat history without code references', () => {
+        const chatData: ChatHistoryData = {
+            title: 'Chat with References',
+            queries: [
+                {
+                    user_query: 'Show me authentication code',
+                    use_knowledge: true,
+                    engine_id: 'test',
+                    repo_context_ids: ['repo1'],
+                    response: [
+                        { type: 'chunk', data: 'Here is the authentication logic:' },
+                        {
+                            type: 'reference',
+                            data: {
+                                file_path: 'Repo github/example: src/auth.ts:10-20',
+                                range_start: 15,
+                                range_end: 25,
+                            },
+                        },
+                    ],
+                },
+            ],
+        }
+
+        const result = formatChatHistory(chatData, { maxTokens: 3000 })
+
+        // Code References should be skipped to reduce token usage
+        expect(result).not.toContain('**Code References:**')
+        expect(result).toContain('Here is the authentication logic:')
+        expect(result).toContain('**User Question:** Show me authentication code')
+    })
+
+    test('formats chat history with multiple queries', () => {
+        const chatData: ChatHistoryData = {
+            title: 'Multi-Query Chat',
+            queries: [
+                {
+                    user_query: 'First question',
+                    use_knowledge: true,
+                    engine_id: 'test',
+                    repo_context_ids: ['repo1'],
+                    response: [{ type: 'chunk', data: 'First answer' }],
+                },
+                {
+                    user_query: 'Second question',
+                    use_knowledge: true,
+                    engine_id: 'test',
+                    repo_context_ids: ['repo1'],
+                    response: [{ type: 'chunk', data: 'Second answer' }],
+                },
+            ],
+        }
+
+        const result = formatChatHistory(chatData, { maxTokens: 3000 })
+
+        expect(result).toContain('## Query 1')
+        expect(result).toContain('**User Question:** First question')
+        expect(result).toContain('First answer')
+        expect(result).toContain('## Query 2')
+        expect(result).toContain('**User Question:** Second question')
+        expect(result).toContain('Second answer')
+        expect(result.split('---').length).toBe(3) // Two separators plus content
+    })
+
+    test('handles empty chat history', () => {
+        const chatData: ChatHistoryData = {
+            title: 'Empty Chat',
+            queries: [],
+        }
+
+        const result = formatChatHistory(chatData, { maxTokens: 3000 })
+
+        expect(result).toBe('No chat history available.')
+    })
+
+    test('handles chat history with no chunks', () => {
+        const chatData: ChatHistoryData = {
+            title: 'No Chunks Chat',
+            queries: [
+                {
+                    user_query: 'Question with no response',
+                    use_knowledge: true,
+                    engine_id: 'test',
+                    repo_context_ids: ['repo1'],
+                    response: [
+                        { type: 'stats', data: {} },
+                        { type: 'done' },
+                    ],
+                },
+            ],
+        }
+
+        const result = formatChatHistory(chatData, { maxTokens: 3000 })
+
+        expect(result).toContain('**User Question:** Question with no response')
+        expect(result).not.toContain('**AI Response:**')
+    })
+
+    test('filters non-chunk and non-reference items', () => {
+        const chatData: ChatHistoryData = {
+            title: 'Mixed Response Types',
+            queries: [
+                {
+                    user_query: 'Complex response',
+                    use_knowledge: true,
+                    engine_id: 'test',
+                    repo_context_ids: ['repo1'],
+                    response: [
+                        { type: 'loading_indexes', data: {} },
+                        { type: 'chunk', data: 'Actual content' },
+                        { type: 'stats', data: {} },
+                        { type: 'done' },
+                    ],
+                },
+            ],
+        }
+
+        const result = formatChatHistory(chatData, { maxTokens: 3000 })
+
+        expect(result).toContain('**AI Response:**')
+        expect(result).toContain('Actual content')
+        expect(result).not.toContain('loading_indexes')
+        expect(result).not.toContain('stats')
+        expect(result).not.toContain('done')
+    })
+
+    test('cleans title with relevant_context tags', () => {
+        const chatData: ChatHistoryData = {
+            title: '<relevant_context>This query was sent from the wiki page: Overview.</relevant_context>コード検索関係の機能はある?',
+            queries: [
+                {
+                    user_query: 'Test question',
+                    use_knowledge: true,
+                    engine_id: 'test',
+                    repo_context_ids: ['repo1'],
+                    response: [{ type: 'chunk', data: 'Test answer' }],
+                },
+            ],
+        }
+
+        const result = formatChatHistory(chatData, { maxTokens: 3000 })
+
+        expect(result).toContain('# コード検索関係の機能はある?')
+        expect(result).not.toContain('<relevant_context>')
+        expect(result).not.toContain('This query was sent from the wiki page: Overview.')
+    })
+
+    test('handles title with multiple relevant_context tags', () => {
+        const chatData: ChatHistoryData = {
+            title: '<relevant_context>Context 1</relevant_context>Main Title<relevant_context>Context 2</relevant_context>',
+            queries: [
+                {
+                    user_query: 'Test question',
+                    use_knowledge: true,
+                    engine_id: 'test',
+                    repo_context_ids: ['repo1'],
+                    response: [{ type: 'chunk', data: 'Test answer' }],
+                },
+            ],
+        }
+
+        const result = formatChatHistory(chatData, { maxTokens: 3000 })
+
+        expect(result).toContain('# Main Title')
+        expect(result).not.toContain('<relevant_context>')
+        expect(result).not.toContain('Context 1')
+        expect(result).not.toContain('Context 2')
+    })
+})
+
+describe('cleanTitle', () => {
+    test('removes single relevant_context tag', () => {
+        const title = '<relevant_context>This query was sent from the wiki page: Overview.</relevant_context>コード検索関係の機能はある?'
+        const result = cleanTitle(title)
+        
+        expect(result).toBe('コード検索関係の機能はある?')
+        expect(result).not.toContain('<relevant_context>')
+    })
+
+    test('removes multiple relevant_context tags', () => {
+        const title = '<relevant_context>Context 1</relevant_context>Main Title<relevant_context>Context 2</relevant_context>'
+        const result = cleanTitle(title)
+        
+        expect(result).toBe('Main Title')
+        expect(result).not.toContain('<relevant_context>')
+    })
+
+    test('handles title without relevant_context tags', () => {
+        const title = 'Normal title without tags'
+        const result = cleanTitle(title)
+        
+        expect(result).toBe('Normal title without tags')
+    })
+
+    test('handles empty title', () => {
+        const title = ''
+        const result = cleanTitle(title)
+        
+        expect(result).toBe('')
+    })
+
+    test('handles title with only relevant_context tags', () => {
+        const title = '<relevant_context>Only context here</relevant_context>'
+        const result = cleanTitle(title)
+        
+        expect(result).toBe('')
     })
 })
