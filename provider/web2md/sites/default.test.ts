@@ -232,10 +232,11 @@ describe('DefaultSiteHandler', () => {
         it('should return expected rules array', () => {
             const rules = handler.getTurndownRules()
             
-            expect(rules).toHaveLength(2)
+            expect(rules).toHaveLength(3)
             expect(rules.map(r => r.name)).toEqual([
                 'removeHeadingLinks',
-                'defaultCodeBlocks'
+                'defaultCodeBlocks',
+                'removeImages'
             ])
         })
     })
@@ -244,7 +245,7 @@ describe('DefaultSiteHandler', () => {
         it('should return expected remove tags', () => {
             const tags = handler.getRemoveTags()
             
-            expect(tags).toEqual(['img', 'script', 'style', 'nav', 'header', 'footer'])
+            expect(tags).toEqual(['script', 'style', 'nav', 'header', 'footer'])
         })
     })
 })

@@ -13,7 +13,7 @@ const debouncedFetch = debounce(fetchWebPage, 300)
 const web2mdProvider: Provider = {
     meta(_params: MetaParams): MetaResult {
         return {
-            name: 'Web to Markdown',
+            name: 'Web2Md',
             mentions: {
                 label: 'Convert web article to Markdown',
             },
@@ -23,26 +23,26 @@ const web2mdProvider: Provider = {
     async mentions(params: MentionsParams, settingsInput?: Partial<Settings>): Promise<MentionsResult> {
         const settings: Settings = { ...DEFAULT_SETTINGS, ...settingsInput }
         const query = params.query?.trim()
-        
+
         if (!query) {
             return []
         }
-        
+
         // Check if query is a valid URL
         if (!isValidUrl(query)) {
             return []
         }
-        
+
         try {
             // Fetch web page with debounce
             const fetchResult = await debouncedFetch(query, settings)
-            
+
             // Extract content
             const extractedContent = extractContent(fetchResult.html, query)
-            
+
             // Convert to Markdown
             const markdown = convertToMarkdown(extractedContent, settings.maxTokens, query)
-            
+
             // Create mention
             const mention: Mention = {
                 title: extractedContent.title,
@@ -52,10 +52,11 @@ const web2mdProvider: Provider = {
                     markdown,
                 },
             }
-            
+
+
             return [mention]
         } catch (error) {
-            
+
             // Return error as mention
             return [{
                 title: 'Error',
@@ -67,11 +68,11 @@ const web2mdProvider: Provider = {
 
     async items(params: ItemsParams, _settingsInput?: Partial<Settings>): Promise<ItemsResult> {
         const mention = params.mention
-        
+
         if (!mention?.data?.markdown) {
             return []
         }
-        
+
         // Use data from mention
         return [{
             title: mention.title,

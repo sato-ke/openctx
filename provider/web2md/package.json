@@ -12,23 +12,24 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "bundle": "tsc --build && esbuild --log-level=error --bundle --format=cjs --outfile=dist/bundle.js index.ts",
+    "bundle": "tsc --build && esbuild --log-level=error --bundle --format=cjs --platform=node --outfile=dist/bundle.js index.ts",
     "prepublishOnly": "tsc --build --clean && npm run --silent bundle",
     "test": "vitest run",
     "test:watch": "vitest",
     "convert": "tsx scripts/convert.ts"
   },
   "dependencies": {
+    "@mixmark-io/domino": "^2.2.0",
     "@openctx/provider": "workspace:*",
     "gpt-tokenizer": "^2.9.0",
     "quick-lru": "^7.0.0",
     "turndown": "^7.2.0"
   },
   "devDependencies": {
-    "@types/jsdom": "^24.0.0",
+    "@types/jsdom": "^21.1.7",
     "@types/node": "^20.12.12",
     "@types/turndown": "^5.0.5",
-    "jsdom": "^24.0.0",
+    "jsdom": "^26.1.0",
     "tsx": "^4.7.1",
     "vitest": "^1.6.0"
   }

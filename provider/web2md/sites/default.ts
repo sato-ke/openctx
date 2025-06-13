@@ -59,10 +59,11 @@ export class DefaultSiteHandler implements SiteHandler {
         return [
             COMMON_RULES.removeHeadingLinks,
             COMMON_RULES.defaultCodeBlocks,
+            COMMON_RULES.removeImages,
         ]
     }
 
     getRemoveTags(): string[] {
-        return ['img', 'script', 'style', 'nav', 'header', 'footer']
+        return ['script', 'style', 'nav', 'header', 'footer']
     }
 }

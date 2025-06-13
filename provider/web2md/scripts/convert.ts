@@ -1,13 +1,29 @@
-import { JSDOM } from 'jsdom'
 import { writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
+import { createRequire } from 'module'
 import web2mdProvider from '../index.js'
 
-// Setup DOM environment for Node.js
-const dom = new JSDOM()
-global.DOMParser = dom.window.DOMParser
-global.Document = dom.window.Document
-global.Node = dom.window.Node
+// Enable require in ESM
+const require = createRequire(import.meta.url)
+;(global as any).require = require
+
+// Setup Node constants for turndown compatibility
+if (typeof global !== 'undefined' && !global.Node) {
+    (global as any).Node = {
+        ELEMENT_NODE: 1,
+        ATTRIBUTE_NODE: 2,
+        TEXT_NODE: 3,
+        CDATA_SECTION_NODE: 4,
+        ENTITY_REFERENCE_NODE: 5,
+        ENTITY_NODE: 6,
+        PROCESSING_INSTRUCTION_NODE: 7,
+        COMMENT_NODE: 8,
+        DOCUMENT_NODE: 9,
+        DOCUMENT_TYPE_NODE: 10,
+        DOCUMENT_FRAGMENT_NODE: 11,
+        NOTATION_NODE: 12
+    }
+}
 
 /**
  * Convert URL to Markdown and save to file
@@ -17,7 +33,7 @@ async function convertUrl(url: string) {
 
     try {
         // Test mentions
-        const mentions = await web2mdProvider.mentions!({ query: url }, {})
+        const mentions = await web2mdProvider.mentions!({ query: url }, { maxTokens: 20000 })
 
         if (mentions.length === 0) {
             console.log('❌ No content found')

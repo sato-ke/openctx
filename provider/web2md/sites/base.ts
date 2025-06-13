@@ -33,11 +33,13 @@ export interface SiteHandler {
  */
 
 /**
- * Parse HTML string into Document
+ * Parse HTML using domino (same as turndown uses)
  */
 export function parseHTML(html: string): Document {
-    const parser = new DOMParser()
-    return parser.parseFromString(html, 'text/html')
+    // Use domino directly (same DOM implementation as turndown)
+    const domino = require('@mixmark-io/domino')
+    const doc = domino.createDocument(html)
+    return doc
 }
 
 /**

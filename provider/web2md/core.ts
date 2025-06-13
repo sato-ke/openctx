@@ -32,6 +32,24 @@ export function extractContent(html: string, url: string): ExtractedContent {
 export function createTurndownService(url: string): TurndownService {
     const handler = findSiteHandler(url)
     
+    // Define Node constants for Turndown compatibility
+    if (typeof global !== 'undefined' && !global.Node) {
+        (global as any).Node = {
+            ELEMENT_NODE: 1,
+            ATTRIBUTE_NODE: 2,
+            TEXT_NODE: 3,
+            CDATA_SECTION_NODE: 4,
+            ENTITY_REFERENCE_NODE: 5,
+            ENTITY_NODE: 6,
+            PROCESSING_INSTRUCTION_NODE: 7,
+            COMMENT_NODE: 8,
+            DOCUMENT_NODE: 9,
+            DOCUMENT_TYPE_NODE: 10,
+            DOCUMENT_FRAGMENT_NODE: 11,
+            NOTATION_NODE: 12
+        }
+    }
+    
     const turndown = new TurndownService({
         headingStyle: 'atx',
         codeBlockStyle: 'fenced',
@@ -81,19 +99,32 @@ function truncateMarkdown(content: string, maxTokens: number): string {
 /**
  * Remove unwanted elements from HTML
  */
-function preprocessHtml(html: string, removeTags: string[]): string {
-    if (removeTags.length === 0) return html
+function preprocessDOM(doc: Document, removeTags: string[]): void {
+    if (removeTags.length === 0) return
     
-    const parser = new DOMParser()
-    const doc = parser.parseFromString(html, 'text/html')
     
-    // Remove specified tags
-    for (const tag of removeTags) {
-        const elements = doc.querySelectorAll(tag)
-        elements.forEach(el => el.remove())
+    // Use DOM API to remove unwanted elements
+    let totalRemoved = 0
+    for (const selector of removeTags) {
+        try {
+            const elements = doc.querySelectorAll(selector)
+            const elementsArray = Array.from(elements)
+            
+            for (const element of elementsArray) {
+                if (element && typeof element.remove === 'function') {
+                    element.remove()
+                    totalRemoved++
+                }
+            }
+        } catch (error) {
+            // Silently continue on selector errors
+        }
     }
     
-    return doc.body.innerHTML
+    if (totalRemoved > 0) {
+        console.log(`[web2md] Removed ${totalRemoved} unwanted elements`)
+    }
+    
 }
 
 /**
@@ -103,8 +134,15 @@ export function convertToMarkdown(extractedContent: ExtractedContent, maxTokens:
     const handler = findSiteHandler(url)
     const removeTags = handler.getRemoveTags?.() || []
     
-    // Preprocess HTML to remove unwanted tags
-    const cleanedContent = preprocessHtml(extractedContent.content, removeTags)
+    // Parse content with domino for DOM manipulation
+    const domino = require('@mixmark-io/domino')
+    const doc = domino.createDocument(extractedContent.content)
+    
+    // Use DOM API to remove unwanted tags
+    preprocessDOM(doc, removeTags)
+    
+    // Get cleaned HTML from DOM
+    const cleanedContent = doc.body ? doc.body.innerHTML : extractedContent.content
     
     const turndown = createTurndownService(url)
     const markdown = turndown.turndown(cleanedContent)
