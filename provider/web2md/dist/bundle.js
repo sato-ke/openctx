@@ -19494,15 +19494,147 @@ ${codeContent.trim()}
   }
 };
 
+// sites/zenn.ts
+var ZennSiteHandler = class {
+  /** Matches Zenn article and book URLs */
+  urlPattern = /^https:\/\/zenn\.dev\/[\w-]+\/(articles|books)\/[\w-]+/;
+  extractContent(html) {
+    const doc = parseHTML(html);
+    const nextDataScript = doc.querySelector("#__NEXT_DATA__");
+    if (nextDataScript?.textContent) {
+      try {
+        const data = JSON.parse(nextDataScript.textContent);
+        const article = data?.props?.pageProps?.article;
+        if (article?.bodyHtml && article?.title) {
+          return {
+            title: article.title,
+            content: article.bodyHtml
+          };
+        }
+      } catch (error) {
+        console.warn("[web2md] Failed to parse __NEXT_DATA__:", error);
+      }
+    }
+    let content = extractContentBySelector(doc, ".znc");
+    if (!content.trim()) {
+      content = extractContentBySelector(doc, "article");
+    }
+    if (!content.trim()) {
+      content = extractContentBySelector(doc, "main");
+    }
+    if (!content.trim()) {
+      return null;
+    }
+    const title = this.extractTitle(doc) || getFallbackTitle(doc);
+    return {
+      title,
+      content
+    };
+  }
+  extractTitle(doc) {
+    const selectors = [
+      'h1[data-testid="article-title"]',
+      ".View_title__VsTaR",
+      "article h1",
+      "h1"
+      // fallback
+    ];
+    for (const selector of selectors) {
+      const element = doc.querySelector(selector);
+      if (element?.textContent?.trim()) {
+        return element.textContent.trim();
+      }
+    }
+    const ogTitle = doc.querySelector('meta[property="og:title"]')?.getAttribute("content");
+    if (ogTitle?.trim()) {
+      return ogTitle.trim();
+    }
+    const title = doc.querySelector("title")?.textContent?.trim();
+    if (title) {
+      return title.replace(/\s*\|\s*Zenn$/, "").trim();
+    }
+    return null;
+  }
+  getTurndownRules() {
+    return [
+      COMMON_RULES.removeHeadingLinks,
+      COMMON_RULES.defaultCodeBlocks,
+      COMMON_RULES.removeImages,
+      // Zenn-specific rules
+      {
+        name: "zennCodeBlocks",
+        filter: (node) => {
+          return node.nodeType === Node.ELEMENT_NODE && node.tagName === "PRE" && !!node.querySelector("code");
+        },
+        replacement: (content, node) => {
+          const pre = node;
+          const code = pre.querySelector("code");
+          const codeContent = code?.textContent || content.trim();
+          const langClass = code?.className.match(/language-(\w+)/);
+          const lang = langClass ? langClass[1] : "";
+          return `
+\`\`\`${lang}
+${codeContent}
+\`\`\`
+`;
+        }
+      },
+      {
+        name: "zennCallouts",
+        filter: (node) => {
+          return node.nodeType === Node.ELEMENT_NODE && node.classList.contains("msg");
+        },
+        replacement: (content, node) => {
+          const element = node;
+          const type = element.classList.contains("msg-warn") ? "\u26A0\uFE0F" : element.classList.contains("msg-alert") ? "\u{1F6A8}" : element.classList.contains("msg-info") ? "\u2139\uFE0F" : "\u{1F4A1}";
+          return `
+> ${type} ${content.trim()}
+`;
+        }
+      }
+    ];
+  }
+  getRemoveTags() {
+    return [
+      // Remove Zenn-specific UI elements
+      ".Header_header__qT0aW",
+      ".Footer_footer__VQIg1",
+      ".View_headerSpacer__BKR_S",
+      ".ArticleHeader_container__WgOT8",
+      ".ArticleFooter_container__w78St",
+      ".LikeButton_container__6_d4D",
+      ".BookmarkButton_container__5X8vY",
+      ".ShareButtons_container__GZDLM",
+      ".AuthorInfo_container__B6FVF",
+      ".TableOfContents_container__dCP5P",
+      ".RelatedArticles_container__qmQzH",
+      // Common elements
+      "nav",
+      'header[role="banner"]',
+      'footer[role="contentinfo"]',
+      "aside",
+      "script",
+      "style",
+      // Ads and tracking
+      ".google-auto-placed",
+      ".adsbygoogle",
+      '[class*="advertisement"]',
+      '[id*="ad"]'
+    ];
+  }
+};
+
 // sites/index.ts
 var SITE_HANDLERS = [
   // Specific site handlers (placed before DefaultSiteHandler for priority)
   new QiitaSiteHandler(),
+  new ZennSiteHandler(),
   // DefaultSiteHandler should always be last (catches all URLs)
   new DefaultSiteHandler()
 ];
 function findSiteHandler(url) {
   const handler = SITE_HANDLERS.find((h) => h.urlPattern.test(url));
+  console.log(`handler: ${handler?.urlPattern}`);
   return handler || new DefaultSiteHandler();
 }
 
