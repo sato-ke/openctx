@@ -1,6 +1,7 @@
 import type { SiteHandler } from './base.js'
 import { DefaultSiteHandler } from './default.js'
 import { QiitaSiteHandler } from './qiita.js'
+import { ZennSiteHandler } from './zenn.js'
 
 /**
  * All available site handlers
@@ -8,6 +9,7 @@ import { QiitaSiteHandler } from './qiita.js'
 const SITE_HANDLERS: SiteHandler[] = [
     // Specific site handlers (placed before DefaultSiteHandler for priority)
     new QiitaSiteHandler(),
+    new ZennSiteHandler(),
 
     // DefaultSiteHandler should always be last (catches all URLs)
     new DefaultSiteHandler(),
@@ -36,3 +38,4 @@ export function getAllSiteHandlers(): readonly SiteHandler[] {
 export type { SiteHandler, ExtractedContent } from './base.js'
 export { DefaultSiteHandler } from './default.js'
 export { QiitaSiteHandler } from './qiita.js'
+export { ZennSiteHandler } from './zenn.js'
