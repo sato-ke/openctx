@@ -1,6 +1,9 @@
 import TurndownService from 'turndown'
 import { encode } from 'gpt-tokenizer'
 import { findSiteHandler, type ExtractedContent } from './sites/index.js'
+import { getVSCodeAPI } from './utils/vscode.js'
+import { generateSafeFilename, buildFilePath } from './utils/file.js'
+import type { Settings } from './types.js'
 
 /**
  * Validate if URL is supported
@@ -167,4 +170,72 @@ Processing: Removed images, scripts, and normalized code blocks using Turndown
     }
     
     return fullContent
+}
+
+/**
+ * Save markdown file locally and mention to Cody
+ * Returns the saved file path if successful, null otherwise
+ */
+export async function saveMarkdownLocally(
+    markdown: string,
+    url: string,
+    title: string,
+    settings: Settings
+): Promise<string | null> {
+    // Check if local save is enabled
+    if (!settings.saveLocal || !settings.saveDirectory) {
+        return null
+    }
+    
+    // Get VSCode API
+    const vscode = getVSCodeAPI()
+    if (!vscode) {
+        console.warn('[web2md] VSCode API not available, skipping local save')
+        return null
+    }
+    
+    try {
+        // Get workspace folder
+        const workspaceFolders = vscode.workspace.workspaceFolders
+        if (!workspaceFolders || workspaceFolders.length === 0) {
+            console.warn('[web2md] No workspace folder found')
+            return null
+        }
+        
+        const workspaceRoot = workspaceFolders[0].uri
+        
+        // Generate filename and path
+        const filename = generateSafeFilename(url)
+        const relativePath = buildFilePath(settings.saveDirectory, filename)
+        
+        // Create directory URI
+        const dirUri = vscode.Uri.joinPath(workspaceRoot, settings.saveDirectory)
+        
+        // Ensure directory exists
+        try {
+            await vscode.workspace.fs.createDirectory(dirUri)
+        } catch (error) {
+            // Directory might already exist, continue
+        }
+        
+        // Create file URI
+        const fileUri = vscode.Uri.joinPath(workspaceRoot, relativePath)
+        
+        // Write file
+        const encoder = new TextEncoder()
+        await vscode.workspace.fs.writeFile(fileUri, encoder.encode(markdown))
+        
+        // Mention file to Cody
+        try {
+            await vscode.commands.executeCommand('cody.mention.file', fileUri)
+            console.log(`[web2md] File saved and mentioned to Cody: ${relativePath}`)
+        } catch (error) {
+            console.warn('[web2md] Failed to mention file to Cody:', error)
+        }
+        
+        return relativePath
+    } catch (error) {
+        console.error('[web2md] Failed to save file locally:', error)
+        return null
+    }
 }

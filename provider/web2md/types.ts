@@ -10,6 +10,10 @@ export interface Settings {
     requestTimeout: number
     /** Maximum content length in tokens */
     maxTokens: number
+    /** Whether to save markdown files locally */
+    saveLocal?: boolean
+    /** Directory name to save files (relative to workspace root) */
+    saveDirectory?: string
 }
 
 /**
@@ -19,6 +23,8 @@ export const DEFAULT_SETTINGS: Settings = {
     userAgent: 'openctx-web2md/1.0.0',
     requestTimeout: 10000,
     maxTokens: 6000,
+    saveLocal: false,
+    saveDirectory: '.web2md-output',
 }
 
 /**
